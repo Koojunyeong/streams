@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>STREAMS — Player vs AI</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Noto+Sans+KR:wght@400;600;700;900&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#0a0e17;--bg2:#111827;--card:#0d1117;--border:#1e293b;--text:#e0e0e0;--dim:#888;--faint:#555;
+    --blue:#7ec8f0;--purple:#c87ef0;--gold:#f0c87e;--green:#2ea668;--yellow:#a6a62e;--red:#a62e2e;
+    --mono:'JetBrains Mono',monospace;--sans:'Noto Sans KR',sans-serif}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:linear-gradient(180deg,var(--bg),var(--bg2),var(--bg));min-height:100vh;
+    font-family:var(--sans);color:var(--text);display:flex;flex-direction:column;align-items:center}
+
+  /* ─── MENU ─── */
+  #menu{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:20px}
+  .title{font-size:72px;font-weight:900;font-family:Georgia,serif;
+    background:linear-gradient(135deg,var(--blue),var(--purple),var(--gold));
+    -webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:-3px;margin-bottom:8px}
+  .subtitle{color:var(--dim);font-size:13px;letter-spacing:6px;text-transform:uppercase;margin-bottom:32px}
+
+  .rules-box{background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:24px 28px;max-width:520px;width:100%}
+  .rules-box h3{color:var(--blue);font-size:15px;margin-bottom:10px}
+  .rules-box ul{color:#aaa;line-height:1.9;font-size:13px;padding-left:20px}
+  .rules-box b{color:var(--text)} .gold{color:var(--gold)}
+  .guide-row{display:flex;gap:16px;font-size:12px;color:#aaa;margin-top:12px;padding-top:10px;border-top:1px solid var(--border)}
+  .guide-dot{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:middle}
+
+  /* ─── SURVEY ─── */
+  #survey{display:none;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:20px}
+  .survey-box{background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:28px 32px;max-width:520px;width:100%}
+  .survey-box h2{color:var(--purple);font-size:20px;margin-bottom:4px}
+  .survey-box .survey-desc{color:var(--dim);font-size:12px;margin-bottom:20px}
+
+  .field{margin-bottom:18px}
+  .field-label{font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px;display:flex;align-items:center;gap:6px}
+  .field-label .req{color:var(--red);font-size:11px}
+
+  .text-input{width:100%;padding:10px 14px;font-size:14px;font-family:var(--sans);background:var(--card);
+    border:1px solid var(--border);border-radius:8px;color:var(--text);outline:none}
+  .text-input:focus{border-color:var(--purple)}
+  .text-input::placeholder{color:var(--faint)}
+
+  .radio-group{display:flex;gap:8px;flex-wrap:wrap}
+  .radio-btn{padding:8px 16px;font-size:13px;font-family:var(--sans);background:var(--card);
+    border:1px solid var(--border);border-radius:8px;cursor:pointer;transition:all .2s;color:var(--dim)}
+  .radio-btn:hover{border-color:var(--purple);color:var(--purple)}
+  .radio-btn.selected{background:#7e2ea622;border-color:var(--purple);color:var(--purple);font-weight:600}
+
+  .checkbox-group{display:flex;gap:6px;flex-wrap:wrap}
+  .check-btn{padding:7px 14px;font-size:12px;font-family:var(--sans);background:var(--card);
+    border:1px solid var(--border);border-radius:8px;cursor:pointer;transition:all .2s;color:var(--dim)}
+  .check-btn:hover{border-color:var(--blue);color:var(--blue)}
+  .check-btn.selected{background:#7ec8f022;border-color:var(--blue);color:var(--blue);font-weight:600}
+
+  .mbti-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+  .mbti-btn{padding:8px 4px;font-size:12px;font-family:var(--mono);font-weight:700;background:var(--card);
+    border:1px solid var(--border);border-radius:8px;cursor:pointer;transition:all .2s;color:var(--dim);text-align:center}
+  .mbti-btn:hover{border-color:var(--gold);color:var(--gold)}
+  .mbti-btn.selected{background:#f0c87e22;border-color:var(--gold);color:var(--gold)}
+
+  .status-bar{margin-top:16px;padding:10px 16px;background:var(--card);border-radius:8px;font-size:12px;display:flex;align-items:center;gap:8px}
+  .status-dot{width:8px;height:8px;border-radius:50%;animation:pulse 2s infinite}
+
+  .btn-start{margin-top:24px;padding:14px 48px;font-size:16px;font-weight:700;font-family:var(--sans);
+    background:linear-gradient(135deg,#2e6ba6,#7e2ea6);color:#fff;border:none;border-radius:12px;
+    cursor:pointer;letter-spacing:2px;text-transform:uppercase;box-shadow:0 4px 24px #2e6ba644;transition:transform .2s}
+  .btn-start:hover{transform:scale(1.06)}
+  .btn-start:disabled{opacity:.4;cursor:not-allowed;transform:none}
+
+  .btn-secondary{padding:14px 48px;font-size:16px;font-weight:700;font-family:var(--sans);
+    background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:12px;
+    cursor:pointer;transition:all .2s}
+  .btn-secondary:hover{border-color:var(--purple)}
+
+  .record{margin-top:12px;color:var(--dim);font-size:13px}
+
+  /* ─── GAME ─── */
+  #game{display:none;flex-direction:column;align-items:center;width:100%;max-width:1120px;padding:16px 12px}
+  .header{display:flex;align-items:center;justify-content:space-between;width:100%;margin-bottom:14px}
+  .score-box{text-align:center;padding:12px 28px;background:var(--card);border-radius:12px;min-width:120px}
+  .score-label{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:2px;margin-bottom:2px}
+  .score-value{font-size:38px;font-weight:900;font-family:var(--mono)}
+  .score-sub{font-size:11px;color:var(--faint);margin-top:2px}
+  .round-box{text-align:center}
+  .round-label{font-size:11px;color:var(--faint);letter-spacing:2px}
+  .round-value{font-size:30px;font-weight:900;font-family:var(--mono);color:var(--gold)}
+
+  .current-card-area{display:flex;align-items:center;gap:16px;padding:14px 28px;background:var(--card);
+    border-radius:12px;border:1px solid var(--border);margin-bottom:16px}
+  .current-card-area .label{font-size:12px;color:var(--dim)}
+
+  .number-card{display:flex;align-items:center;justify-content:center;border-radius:8px;font-weight:800;
+    font-family:var(--mono);user-select:none;transition:all .3s}
+  .card-sm{width:34px;height:42px;font-size:14px}.card-md{width:48px;height:60px;font-size:20px}
+  .card-lg{width:72px;height:90px;font-size:32px}
+  .card-low{background:linear-gradient(135deg,#1a3a5c,#1a3a5cdd);border:2px solid #2e6ba6;color:var(--blue)}
+  .card-mid{background:linear-gradient(135deg,#3a1a5c,#3a1a5cdd);border:2px solid #7e2ea6;color:var(--purple)}
+  .card-high{background:linear-gradient(135deg,#5c3a1a,#5c3a1add);border:2px solid #a67e2e;color:var(--gold)}
+  .card-glow-low{box-shadow:0 0 20px #2e6ba688,0 0 40px #2e6ba644}
+  .card-glow-mid{box-shadow:0 0 20px #7e2ea688,0 0 40px #7e2ea644}
+  .card-glow-high{box-shadow:0 0 20px #a67e2e88,0 0 40px #a67e2e44}
+
+  .ai-thinking{font-size:12px;color:var(--purple);animation:pulse 1s infinite}
+  .player-prompt{font-size:12px;color:var(--blue)}
+
+  .board-section{width:100%;margin-bottom:10px}
+  .board-label{font-size:12px;font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:6px}
+  .board-label .icon{font-size:16px}.ai-note{color:var(--dim);font-size:11px;margin-left:8px;font-weight:400}
+  .board-row{display:flex;gap:4px;justify-content:center;flex-wrap:wrap;padding:4px 0}
+
+  .slot{width:48px;height:60px;border-radius:8px;display:flex;align-items:center;justify-content:center;
+    flex-direction:column;transition:all .2s;position:relative}
+  .slot-empty{background:linear-gradient(135deg,#1a1a2e,#16213e);border:2px dashed #333;cursor:default}
+  .slot-empty.clickable{cursor:pointer}.slot-empty.clickable:hover{transform:scale(1.08)}
+  .slot-empty.hl-safe{border-color:var(--green);background-color:#2ea66822}
+  .slot-empty.hl-valid{border-color:var(--yellow);background-color:#a6a62e22}
+  .slot-empty.hl-danger{border-color:var(--red);background-color:#a62e2e22}
+  .slot-index{color:var(--faint);font-size:11px;font-family:var(--mono)}
+  .slot-filled{border:none}
+  .ai-marker{position:absolute;top:-4px;right:-4px;width:8px;height:8px;border-radius:50%;
+    background:var(--purple);box-shadow:0 0 6px var(--purple)}
+  .slot-pop{animation:popIn .3s ease}
+  .q-bar{position:absolute;bottom:0;left:2px;right:2px;border-radius:0 0 6px 6px;opacity:.5;transition:height .3s}
+
+  .score-table-box{width:100%;background:var(--card);border-radius:12px;padding:12px 16px;
+    border:1px solid var(--border);margin-bottom:10px}
+  .score-table-label{font-size:11px;color:var(--faint);letter-spacing:2px;margin-bottom:8px}
+  .score-table-row{display:flex;gap:2px;flex-wrap:wrap;justify-content:center}
+  .score-table-item{text-align:center;padding:4px 6px;border-radius:6px;background:var(--bg2);min-width:46px}
+  .score-table-item .streak{font-size:10px;color:var(--dim)}
+  .score-table-item .pts{font-size:13px;font-weight:700;font-family:var(--mono)}
+
+  .result-box{padding:20px 36px;margin-bottom:16px;border-radius:12px;text-align:center;width:100%}
+  .result-box.win{background:#2ea66822;border:1px solid #2ea66844}
+  .result-box.lose{background:#a62e2e22;border:1px solid #a62e2e44}
+  .result-box.draw{background:#a6a62e22;border:1px solid #a6a62e44}
+  .result-msg{font-size:32px;font-weight:900}.result-detail{font-size:13px;color:#aaa;margin-top:6px}
+  .result-saved{font-size:11px;color:var(--green);margin-top:8px}
+  .btn-retry{margin-top:14px;padding:10px 36px;font-size:14px;font-weight:700;font-family:var(--sans);
+    background:linear-gradient(135deg,#2e6ba6,#7e2ea6);color:#fff;border:none;border-radius:8px;cursor:pointer;transition:transform .2s}
+  .btn-retry:hover{transform:scale(1.05)}
+
+  .qval-toggle{font-size:11px;color:var(--dim);cursor:pointer;user-select:none;margin-left:auto;
+    padding:2px 8px;border:1px solid var(--border);border-radius:4px;transition:all .2s}
+  .qval-toggle:hover{border-color:var(--purple);color:var(--purple)}
+  .qval-toggle.active{border-color:var(--purple);color:var(--purple);background:#7e2ea611}
+
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+  @keyframes popIn{0%{transform:scale(.5);opacity:0}70%{transform:scale(1.1)}100%{transform:scale(1);opacity:1}}
+</style>
+</head>
+<body>
+
+<!-- ═══ MENU ═══ -->
+<div id="menu">
+  <div class="title">STREAMS</div>
+  <div class="subtitle">Player vs Trained AI</div>
+  <div class="rules-box">
+    <h3>📜 게임 규칙</h3>
+    <ul>
+      <li>1~30 사이의 숫자 카드 20장이 순서대로 공개됩니다</li>
+      <li>공개된 카드를 20칸 보드의 원하는 위치에 배치하세요</li>
+      <li>플레이어와 AI는 <b>같은 카드</b>를 동시에 받습니다</li>
+      <li>최종 보드에서 <b>오름차순 연속 구간</b>이 길수록 고득점!</li>
+      <li>20칸 전부 오름차순이면 <b class="gold">300점 만점!</b></li>
+    </ul>
+    <div class="guide-row">
+      <span><span class="guide-dot" style="background:var(--green)"></span> 안전</span>
+      <span><span class="guide-dot" style="background:var(--yellow)"></span> 가능</span>
+      <span><span class="guide-dot" style="background:var(--red)"></span> 위험</span>
+    </div>
+  </div>
+  <div class="status-bar">
+    <span class="status-dot" id="status-dot" style="background:var(--red)"></span>
+    <span id="status-text">서버 연결 확인 중...</span>
+  </div>
+  <div class="record" id="record"></div>
+  <button class="btn-start" onclick="showSurvey()">게임 시작</button>
+</div>
+
+<!-- ═══ SURVEY ═══ -->
+<div id="survey">
+  <div class="survey-box">
+    <h2>📋 플레이어 설문</h2>
+    <div class="survey-desc">게임 전 간단한 설문에 답해주세요. 연구 데이터로 활용됩니다.</div>
+
+    <!-- 닉네임 -->
+    <div class="field">
+      <div class="field-label">닉네임 <span class="req">*</span></div>
+      <input class="text-input" id="s-name" placeholder="이름을 입력하세요" maxlength="20">
+    </div>
+
+    <!-- 나이 -->
+    <div class="field">
+      <div class="field-label">나이 <span class="req">*</span></div>
+      <div class="radio-group" id="s-age">
+        <div class="radio-btn" onclick="selectRadio('s-age',this)">10대</div>
+        <div class="radio-btn" onclick="selectRadio('s-age',this)">20대</div>
+        <div class="radio-btn" onclick="selectRadio('s-age',this)">30대</div>
+        <div class="radio-btn" onclick="selectRadio('s-age',this)">40대</div>
+        <div class="radio-btn" onclick="selectRadio('s-age',this)">50대 이상</div>
+      </div>
+    </div>
+
+    <!-- 성별 -->
+    <div class="field">
+      <div class="field-label">성별 <span class="req">*</span></div>
+      <div class="radio-group" id="s-gender">
+        <div class="radio-btn" onclick="selectRadio('s-gender',this)">남성</div>
+        <div class="radio-btn" onclick="selectRadio('s-gender',this)">여성</div>
+        <div class="radio-btn" onclick="selectRadio('s-gender',this)">기타</div>
+      </div>
+    </div>
+
+    <!-- MBTI -->
+    <div class="field">
+      <div class="field-label">MBTI <span class="req">*</span></div>
+      <div class="mbti-grid" id="s-mbti">
+        <div class="mbti-btn" onclick="selectRadio('s-mbti',this)">ISTJ</div>
+        <div class="mbti-btn" onclick="selectRadio('s-mbti',this)">ISFJ</div>
+        <div class="mbti-btn" onclick="selectRadio('s-mbti',this)">INFJ</div>
+        <div class="mbti-btn" onclick="selectRadio('s-mbti',this)">INTJ</div>
+        <div class="mbti-btn" onclick="selectRadio('s-mbti',this)">ISTP</div>
+        <div class="mbti-btn" onclick="selectRadio('s-mbti',this)">ISFP</div>
+        <div class="mbti-btn" onclick="selectRadio('s-mbti',this)">INFP</div>
+        <div class="mbti-btn" onclick="selectRadio('s-mbti',this)">INTP</div>
+        <div class="mbti-btn" onclick="selectRadio('s-mbti',this)">ESTP</div>
+        <div class="mbti-btn" onclick="selectRadio('s-mbti',this)">ESFP</div>
+        <div class="mbti-btn" onclick="selectRadio('s-mbti',this)">ENFP</div>
+        <div class="mbti-btn" onclick="selectRadio('s-mbti',this)">ENTP</div>
+        <div class="mbti-btn" onclick="selectRadio('s-mbti',this)">ESTJ</div>
+        <div class="mbti-btn" onclick="selectRadio('s-mbti',this)">ESFJ</div>
+        <div class="mbti-btn" onclick="selectRadio('s-mbti',this)">ENFJ</div>
+        <div class="mbti-btn" onclick="selectRadio('s-mbti',this)">ENTJ</div>
+      </div>
+    </div>
+
+    <!-- 주간 플레이타임 -->
+    <div class="field">
+      <div class="field-label">1주일 게임 플레이타임 <span class="req">*</span></div>
+      <div class="radio-group" id="s-playtime">
+        <div class="radio-btn" onclick="selectRadio('s-playtime',this)">10시간 이하</div>
+        <div class="radio-btn" onclick="selectRadio('s-playtime',this)">10~20시간</div>
+        <div class="radio-btn" onclick="selectRadio('s-playtime',this)">20~30시간</div>
+        <div class="radio-btn" onclick="selectRadio('s-playtime',this)">30~40시간</div>
+        <div class="radio-btn" onclick="selectRadio('s-playtime',this)">40시간 이상</div>
+      </div>
+    </div>
+
+    <!-- 주로 플레이하는 장르 (복수 선택) -->
+    <div class="field">
+      <div class="field-label">주로 플레이하는 게임 장르 <span style="font-size:11px;color:var(--dim);font-weight:400">(복수 선택 가능)</span></div>
+      <div class="checkbox-group" id="s-genres">
+        <div class="check-btn" onclick="toggleCheck(this)">RPG</div>
+        <div class="check-btn" onclick="toggleCheck(this)">FPS</div>
+        <div class="check-btn" onclick="toggleCheck(this)">Roguelike</div>
+        <div class="check-btn" onclick="toggleCheck(this)">RTS</div>
+        <div class="check-btn" onclick="toggleCheck(this)">AOS/MOBA</div>
+        <div class="check-btn" onclick="toggleCheck(this)">Sports</div>
+        <div class="check-btn" onclick="toggleCheck(this)">Card</div>
+        <div class="check-btn" onclick="toggleCheck(this)">Board</div>
+        <div class="check-btn" onclick="toggleCheck(this)">Puzzle</div>
+        <div class="check-btn" onclick="toggleCheck(this)">Simulation</div>
+        <div class="check-btn" onclick="toggleCheck(this)">기타</div>
+      </div>
+    </div>
+
+    <div id="survey-error" style="color:var(--red);font-size:12px;margin-bottom:8px;display:none"></div>
+  </div>
+
+  <div style="display:flex;gap:12px;margin-top:24px">
+    <button class="btn-secondary" onclick="backToMenu()">← 돌아가기</button>
+    <button class="btn-start" onclick="submitSurveyAndStart()">게임 시작 →</button>
+  </div>
+</div>
+
+<!-- ═══ GAME ═══ -->
+<div id="game">
+  <div class="header">
+    <div class="score-box" style="border:1px solid #7ec8f033">
+      <div class="score-label">YOU</div>
+      <div class="score-value" id="player-score" style="color:var(--blue)">0</div>
+      <div class="score-sub" id="player-count">0/20</div>
+    </div>
+    <div class="round-box">
+      <div class="round-label">ROUND</div>
+      <div class="round-value" id="round-display">1/20</div>
+    </div>
+    <div class="score-box" style="border:1px solid #c87ef033">
+      <div class="score-label">AI</div>
+      <div class="score-value" id="ai-score" style="color:var(--purple)">0</div>
+      <div class="score-sub" id="ai-count">0/20</div>
+    </div>
+  </div>
+  <div class="current-card-area" id="card-area">
+    <span class="label">현재 카드</span>
+    <div id="current-card"></div>
+    <span id="turn-msg" class="player-prompt">카드를 배치하세요</span>
+  </div>
+  <div id="result-area" style="display:none"></div>
+  <div class="board-section">
+    <div class="board-label" style="color:var(--blue)"><span class="icon">👤</span> YOUR BOARD</div>
+    <div class="board-row" id="player-board"></div>
+  </div>
+  <div class="board-section">
+    <div class="board-label" style="color:var(--purple)">
+      <span class="icon">🤖</span> AI BOARD
+      <span class="ai-note" id="ai-note"></span>
+      <span class="qval-toggle" id="qval-toggle" onclick="toggleQValues()">Q-values</span>
+    </div>
+    <div class="board-row" id="ai-board"></div>
+  </div>
+  <div class="score-table-box">
+    <div class="score-table-label">SCORING TABLE</div>
+    <div class="score-table-row" id="score-table"></div>
+  </div>
+</div>
+
+<script>
+const ST={1:0,2:1,3:3,4:5,5:7,6:9,7:11,8:15,9:20,10:25,11:30,12:35,13:40,14:50,15:60,16:70,17:85,18:100,19:150,20:300};
+let deck=[],ci=0,pBoard=Array(20).fill(0),aBoard=Array(20).fill(0),
+    turnPhase='player',gameActive=false,lastAi=-1,lastQ=null,showQ=false,
+    playerName='Anonymous',playerId=null,history={w:0,l:0,d:0},turnLog=[];
+
+// ─── Survey helpers ───
+function selectRadio(groupId,el){
+  document.querySelectorAll(`#${groupId} .radio-btn, #${groupId} .mbti-btn`).forEach(b=>b.classList.remove('selected'));
+  el.classList.add('selected');
+}
+function toggleCheck(el){el.classList.toggle('selected')}
+
+function getRadioValue(groupId){
+  const sel=document.querySelector(`#${groupId} .selected`);
+  return sel?sel.textContent.trim():'';
+}
+function getCheckValues(groupId){
+  return Array.from(document.querySelectorAll(`#${groupId} .selected`)).map(e=>e.textContent.trim());
+}
+
+function showSurvey(){
+  document.getElementById('menu').style.display='none';
+  document.getElementById('survey').style.display='flex';
+}
+
+function backToMenu(){
+  document.getElementById('survey').style.display='none';
+  document.getElementById('menu').style.display='flex';
+}
+
+async function submitSurveyAndStart(){
+  const name=document.getElementById('s-name').value.trim();
+  const age=getRadioValue('s-age');
+  const gender=getRadioValue('s-gender');
+  const mbti=getRadioValue('s-mbti');
+  const playtime=getRadioValue('s-playtime');
+  const genres=getCheckValues('s-genres');
+
+  // 유효성 검사
+  const errEl=document.getElementById('survey-error');
+  if(!name||!age||!gender||!mbti||!playtime){
+    errEl.textContent='⚠ 모든 필수 항목을 선택해주세요.';errEl.style.display='block';return;
+  }
+  errEl.style.display='none';
+  playerName=name;
+
+  // 설문 서버 저장
+  try{
+    const res=await fetch('/api/save_survey',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({player_name:name,age,gender,mbti,playtime,genres})});
+    const data=await res.json();
+    if(!res.ok || !data.player_id){
+      throw new Error(data.message || '설문 저장 실패');
+    }
+    playerId=data.player_id;
+    startGame();
+  }catch(e){
+    errEl.textContent='설문 저장에 실패했습니다. 잠시 후 다시 시도해주세요.';
+    errEl.style.display='block';
+    playerId=null;
+  }
+}
+
+// ─── Game Logic ───
+function buildPool(){const p=[];for(let i=1;i<=10;i++)p.push(i);for(let i=11;i<=20;i++){p.push(i);p.push(i)}for(let i=21;i<=30;i++)p.push(i);return p}
+function shuffle(a){a=[...a];for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+function calcScore(b){const v=b.filter(x=>x);if(!v.length)return 0;let s=0,i=0;while(i<v.length){let j=i;while(j+1<v.length&&v[j]<=v[j+1])j++;s+=ST[j-i+1]||0;i=j+1}return s}
+function getVM(b,n){const m=Array(20).fill(false);for(let i=0;i<20;i++){if(b[i])continue;let lv=0;for(let l=i-1;l>=0;l--)if(b[l]){lv=b[l];break}let rv=31;for(let r=i+1;r<20;r++)if(b[r]){rv=b[r];break}if(lv<n&&n<rv)m[i]=true}return m}
+function getPM(b,n,d,c){const rem=d.slice(c+1),cnt=(lo,hi)=>rem.filter(x=>x>lo&&x<hi).length,m=Array(20).fill(false);
+  for(let i=0;i<20;i++){if(b[i])continue;let lv=0,li=-1;for(let l=i-1;l>=0;l--)if(b[l]){lv=b[l];li=l;break}
+    let rv=31,ri=20;for(let r=i+1;r<20;r++)if(b[r]){rv=b[r];ri=r;break}if(!(lv<n&&n<rv))continue;
+    if(i-li-1>0&&cnt(lv,n)<i-li-1)continue;if(ri-i-1>0&&cnt(n,rv)<ri-i-1)continue;m[i]=true}return m}
+
+function cc(v){return v<=10?'card-low':v<=20?'card-mid':'card-high'}
+function cg(v){return v<=10?'card-glow-low':v<=20?'card-glow-mid':'card-glow-high'}
+function renderCard(){const n=deck[ci];document.getElementById('current-card').innerHTML=`<div class="number-card card-lg ${cc(n)} ${cg(n)}">${n}</div>`}
+
+function renderPB(){
+  const n=deck[ci]||0,vm=turnPhase==='player'&&gameActive?getVM(pBoard,n):Array(20).fill(false),
+        pm=turnPhase==='player'&&gameActive?getPM(pBoard,n,deck,ci):Array(20).fill(false);
+  let h='';for(let i=0;i<20;i++){if(pBoard[i]){h+=`<div class="slot slot-filled"><div class="number-card card-md ${cc(pBoard[i])}">${pBoard[i]}</div></div>`}
+    else{let hl='',cl='';if(gameActive&&turnPhase==='player'){cl='clickable';hl=pm[i]?'hl-safe':vm[i]?'hl-valid':'hl-danger'}
+      h+=`<div class="slot slot-empty ${hl} ${cl}" onclick="place(${i})"><span class="slot-index">${i+1}</span></div>`}}
+  document.getElementById('player-board').innerHTML=h}
+
+function renderAB(){
+  let h='',qMin=0,qMax=1;if(lastQ){const v=lastQ.filter((_,i)=>aBoard[i]===0);if(v.length){qMin=Math.min(...v);qMax=Math.max(...v)}}
+  for(let i=0;i<20;i++){if(aBoard[i]){const mk=i===lastAi?'<div class="ai-marker"></div>':'',pop=i===lastAi?'slot-pop':'';
+      h+=`<div class="slot slot-filled ${pop}" style="position:relative">${mk}<div class="number-card card-md ${cc(aBoard[i])}">${aBoard[i]}</div></div>`}
+    else{let qb='';if(showQ&&lastQ){const nm=qMax>qMin?(lastQ[i]-qMin)/(qMax-qMin):.5,ht=Math.max(2,Math.round(nm*50)),
+      hu=Math.round(nm*120);qb=`<div class="q-bar" style="height:${ht}%;background:hsl(${hu},70%,45%)"></div>`}
+      h+=`<div class="slot slot-empty" style="position:relative"><span class="slot-index">${i+1}</span>${qb}</div>`}}
+  document.getElementById('ai-board').innerHTML=h}
+
+function updateScores(){
+  const ps=calcScore(pBoard),as_=calcScore(aBoard);
+  document.getElementById('player-score').textContent=ps;document.getElementById('ai-score').textContent=as_;
+  document.getElementById('player-count').textContent=`${pBoard.filter(x=>x).length}/20`;
+  document.getElementById('ai-count').textContent=`${aBoard.filter(x=>x).length}/20`;return{ps,as_}}
+
+function renderST(){let h='';for(const[s,p]of Object.entries(ST)){const c=p>=100?'var(--gold)':p>=30?'var(--purple)':'var(--blue)';
+  h+=`<div class="score-table-item"><div class="streak">${s}연속</div><div class="pts" style="color:${c}">${p}</div></div>`}
+  document.getElementById('score-table').innerHTML=h}
+function toggleQValues(){showQ=!showQ;document.getElementById('qval-toggle').classList.toggle('active',showQ);renderAB()}
+
+async function checkServer(){
+  try{const r=await fetch('/api/health');const d=await r.json();
+    if(d.ai_ready){document.getElementById('status-dot').style.background='var(--green)';document.getElementById('status-text').textContent=d.model_loaded?`모델 로드 완료 (${d.device.toUpperCase()})`:`AI 준비됨 (fallback, ${d.device.toUpperCase()})`}
+    else{document.getElementById('status-dot').style.background='var(--yellow)';document.getElementById('status-text').textContent='서버 연결됨'}}
+  catch(e){document.getElementById('status-dot').style.background='var(--red)';document.getElementById('status-text').textContent='서버 연결 실패'}}
+
+async function requestAi(){
+  try{const r=await fetch('/api/ai_move',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({board:aBoard,current_num:deck[ci],deck,current_index:ci})});return await r.json()}
+  catch(e){const em=aBoard.map((v,i)=>v===0?i:-1).filter(i=>i>=0);return{action:em[Math.floor(Math.random()*em.length)]||0,q_values:null}}}
+
+async function saveGame(result){
+  const ps=calcScore(pBoard),as_=calcScore(aBoard);
+  try{await fetch('/api/save_game',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({player_id:playerId,player_name:playerName,deck,player_board:pBoard,ai_board:aBoard,
+      player_score:ps,ai_score:as_,result,turns:turnLog})});return true}catch(e){return false}}
+
+function startGame(){
+  document.getElementById('survey').style.display='none';
+  deck=shuffle(buildPool()).slice(0,20);ci=0;pBoard=Array(20).fill(0);aBoard=Array(20).fill(0);
+  turnPhase='player';gameActive=true;lastAi=-1;lastQ=null;turnLog=[];
+  document.getElementById('menu').style.display='none';
+  document.getElementById('game').style.display='flex';
+  document.getElementById('result-area').style.display='none';
+  document.getElementById('card-area').style.display='flex';
+  document.getElementById('round-display').textContent='1/20';
+  document.getElementById('turn-msg').className='player-prompt';
+  document.getElementById('turn-msg').textContent='카드를 배치하세요';
+  document.getElementById('ai-note').textContent='';
+  renderCard();renderPB();renderAB();updateScores();renderST()}
+
+async function place(idx){
+  if(!gameActive||turnPhase!=='player'||pBoard[idx])return;
+  const num=deck[ci];pBoard[idx]=num;turnPhase='ai';renderPB();updateScores();
+  const tm=document.getElementById('turn-msg');tm.className='ai-thinking';tm.textContent='AI 배치 중...';
+  const res=await requestAi();await new Promise(r=>setTimeout(r,400));
+  const aiAct=res.action;aBoard[aiAct]=num;lastAi=aiAct;lastQ=res.q_values||null;
+  document.getElementById('ai-note').textContent=`→ 슬롯 ${aiAct+1}에 배치`;
+  renderAB();const{ps,as_}=updateScores();
+  turnLog.push({turn:ci+1,card:num,card_order:ci+1,deck_index:ci,player_slot:idx,ai_slot:aiAct,player_score_after:ps,ai_score_after:as_});
+  ci++;if(ci>=20){endGame();return}
+  document.getElementById('round-display').textContent=`${ci+1}/20`;
+  turnPhase='player';tm.className='player-prompt';tm.textContent='카드를 배치하세요';
+  renderCard();renderPB()}
+
+async function endGame(){
+  gameActive=false;const ps=calcScore(pBoard),as_=calcScore(aBoard);
+  let cls,msg,result;
+  if(ps>as_){cls='win';msg='🏆 승리!';result='win';history.w++}
+  else if(ps<as_){cls='lose';msg='😤 패배...';result='lose';history.l++}
+  else{cls='draw';msg='🤝 무승부!';result='draw';history.d++}
+  document.getElementById('card-area').style.display='none';
+  document.getElementById('round-display').textContent='END';
+  const saved=await saveGame(result);
+  const sm=saved?'<div class="result-saved">✓ 기록이 저장되었습니다</div>':'';
+  const ra=document.getElementById('result-area');ra.style.display='block';
+  ra.innerHTML=`<div class="result-box ${cls}"><div class="result-msg">${msg}</div>
+    <div class="result-detail">${playerName} ${ps} : ${as_} AI</div>${sm}
+    <button class="btn-retry" onclick="goMenu()">메뉴로</button>
+    <button class="btn-retry" onclick="startGame()" style="margin-left:8px">다시 하기</button></div>`;
+  renderPB();renderAB();updateRecord()}
+
+function goMenu(){document.getElementById('game').style.display='none';document.getElementById('menu').style.display='flex';updateRecord()}
+function updateRecord(){const t=history.w+history.l+history.d;if(t>0)document.getElementById('record').textContent=`전적: ${history.w}승 ${history.l}패 ${history.d}무`}
+
+checkServer();renderST();
+</script>
+</body>
+</html>

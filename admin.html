@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>STREAMS Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#070b14;
+    --panel:#0d1220;
+    --panel-2:#10192d;
+    --line:#1d2740;
+    --text:#e8eefc;
+    --muted:#92a0bf;
+    --blue:#7ec8f0;
+    --purple:#c87ef0;
+    --gold:#f0c87e;
+    --green:#2ea668;
+    --red:#a62e2e;
+    --mono:'JetBrains Mono',monospace;
+    --sans:'Noto Sans KR',sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:
+    radial-gradient(circle at top left, rgba(126,200,240,.18), transparent 28%),
+    radial-gradient(circle at top right, rgba(200,126,240,.14), transparent 28%),
+    linear-gradient(180deg,#070b14 0%, #0a1120 100%);
+    color:var(--text);font-family:var(--sans);min-height:100%}
+  body{padding:24px}
+  a{color:var(--blue);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .shell{max-width:1440px;margin:0 auto}
+  .hero{display:flex;justify-content:space-between;gap:16px;align-items:flex-end;flex-wrap:wrap;margin-bottom:18px}
+  .title-wrap h1{margin:0;font-size:32px;line-height:1;background:linear-gradient(135deg,var(--blue),var(--purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+  .title-wrap p{margin:8px 0 0;color:var(--muted);font-size:13px}
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .btn{border:1px solid var(--line);background:linear-gradient(180deg,var(--panel),#0b1020);color:var(--text);
+    padding:10px 14px;border-radius:10px;font-weight:700;font-family:var(--sans);cursor:pointer;transition:.2s}
+  .btn:hover{border-color:var(--purple);transform:translateY(-1px)}
+  .btn-primary{background:linear-gradient(135deg,#2d6ba6,#7d2ea6);border:none}
+  .chip{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;background:rgba(255,255,255,.03);border:1px solid var(--line);font-size:12px;color:var(--muted)}
+  .dot{width:8px;height:8px;border-radius:999px;background:var(--red)}
+  .grid-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:18px 0 20px}
+  .card{background:linear-gradient(180deg,var(--panel),var(--panel-2));border:1px solid var(--line);border-radius:18px;padding:16px 18px;box-shadow:0 18px 60px rgba(0,0,0,.24)}
+  .stat-label{color:var(--muted);font-size:11px;letter-spacing:1.2px;text-transform:uppercase;margin-bottom:8px}
+  .stat-value{font-family:var(--mono);font-size:28px;font-weight:900}
+  .layout{display:grid;grid-template-columns:1.55fr .95fr;gap:16px}
+  .panel{background:linear-gradient(180deg,var(--panel),var(--panel-2));border:1px solid var(--line);border-radius:18px;padding:16px;overflow:hidden}
+  .panel h2{margin:0 0 12px;font-size:16px}
+  .controls{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+  .input, .select{
+    background:#0a1020;border:1px solid var(--line);color:var(--text);border-radius:10px;
+    padding:10px 12px;font-size:13px;outline:none
+  }
+  .input{min-width:220px;flex:1}
+  .select{min-width:160px}
+  .table-wrap{overflow:auto;border:1px solid var(--line);border-radius:14px}
+  table{width:100%;border-collapse:collapse;min-width:1120px;background:rgba(255,255,255,.01)}
+  thead{background:#0b1326;position:sticky;top:0;z-index:1}
+  th,td{padding:12px 14px;border-bottom:1px solid rgba(255,255,255,.06);text-align:left;vertical-align:top}
+  th{font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);font-weight:700}
+  td{font-size:13px;color:var(--text)}
+  tr:hover td{background:rgba(255,255,255,.03)}
+  .mono{font-family:var(--mono)}
+  .badge{display:inline-flex;align-items:center;justify-content:center;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:800}
+  .win{background:rgba(46,166,104,.16);color:#7edfa0}
+  .lose{background:rgba(166,46,46,.18);color:#ff8a8a}
+  .draw{background:rgba(240,200,126,.18);color:#f5d58f}
+  .mbti{background:rgba(126,200,240,.14);color:var(--blue)}
+  .mini-board{display:flex;gap:2px;flex-wrap:wrap;max-width:260px}
+  .cell{width:18px;height:20px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:800}
+  .low{background:#17324f;color:#8fc9f0}
+  .mid{background:#31174f;color:#d19bf6}
+  .high{background:#4f3517;color:#f1c47a}
+  .pager{display:flex;gap:8px;justify-content:center;margin-top:14px;flex-wrap:wrap}
+  .page-btn{padding:8px 12px;border-radius:10px;border:1px solid var(--line);background:#0a1020;color:var(--text);cursor:pointer;font-family:var(--mono)}
+  .page-btn.active{background:var(--purple);border-color:var(--purple)}
+  .analysis-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
+  .bar-row{display:grid;grid-template-columns:70px 1fr 90px;gap:8px;align-items:center;margin-top:10px}
+  .bar-label{font-size:12px;color:var(--muted);text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .bar-track{height:22px;background:#0a1020;border:1px solid var(--line);border-radius:999px;overflow:hidden}
+  .bar-fill{height:100%;border-radius:999px;color:#fff;font-family:var(--mono);font-weight:700;font-size:11px;display:flex;align-items:center;padding:0 8px;min-width:24px}
+  .bar-info{font-size:11px;color:var(--muted);text-align:right}
+  .muted{color:var(--muted)}
+  .empty{padding:28px;color:var(--muted);text-align:center}
+  .modal{display:none;position:fixed;inset:0;background:rgba(1,5,15,.72);backdrop-filter:blur(10px);align-items:center;justify-content:center;padding:20px;z-index:50}
+  .modal-card{width:min(920px,100%);max-height:88vh;overflow:auto;background:linear-gradient(180deg,#10182b,#0a1020);border:1px solid var(--line);border-radius:22px;padding:20px}
+  .modal-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:16px}
+  .close{background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer}
+  .turn-table{width:100%;border-collapse:collapse}
+  .turn-table th,.turn-table td{padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.06);font-size:13px}
+  .turn-table th{font-size:11px}
+  @media (max-width: 1100px){.layout{grid-template-columns:1fr}.table-wrap table{min-width:980px}}
+  @media (max-width: 640px){body{padding:16px}.title-wrap h1{font-size:26px}.toolbar{width:100%}.btn,.input,.select{width:100%}}
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="hero">
+    <div class="title-wrap">
+      <h1>STREAMS Admin</h1>
+      <p>경기 기록, 턴 상세, 설문 통계를 한 화면에서 확인합니다.</p>
+    </div>
+    <div class="toolbar">
+      <span class="chip"><span class="dot" id="health-dot"></span><span id="health-text">서버 확인 중...</span></span>
+      <button class="btn" onclick="loadAll()">새로고침</button>
+      <button class="btn btn-primary" onclick="downloadCSV()">CSV 다운로드</button>
+      <a class="btn" href="/">게임으로</a>
+    </div>
+  </div>
+
+  <div class="grid-stats" id="stats-row"></div>
+
+  <div class="layout">
+    <section class="panel">
+      <h2>경기 기록</h2>
+      <div class="controls">
+        <input id="search" class="input" type="search" placeholder="플레이어 이름, MBTI, 결과 검색">
+        <select id="result-filter" class="select">
+          <option value="">전체 결과</option>
+          <option value="win">승리</option>
+          <option value="lose">패배</option>
+          <option value="draw">무승부</option>
+        </select>
+        <button class="btn" onclick="applyFilters()">필터 적용</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Player</th>
+              <th>MBTI</th>
+              <th>Played At</th>
+              <th>Board</th>
+              <th>Score</th>
+              <th>Result</th>
+              <th>Detail</th>
+            </tr>
+          </thead>
+          <tbody id="table-body">
+            <tr><td colspan="8" class="empty">불러오는 중...</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="pager" id="pagination"></div>
+    </section>
+
+    <aside class="panel">
+      <h2>설문 분석</h2>
+      <div class="controls">
+        <button class="btn" onclick="loadAnalysis()">분석 갱신</button>
+      </div>
+      <div class="analysis-grid" id="analysis-grid"></div>
+    </aside>
+  </div>
+</div>
+
+<div class="modal" id="detail-modal" onclick="if(event.target===this)closeDetail()">
+  <div class="modal-card" id="detail-content"></div>
+</div>
+
+<script>
+let currentPage = 1;
+let cachedGames = [];
+let cachedTotal = 0;
+
+function fmtTime(t){
+  if(!t) return '-';
+  return new Date(t).toLocaleString('ko-KR', {month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'});
+}
+
+function renderBoard(boardJson){
+  try{
+    const board = typeof boardJson === 'string' ? JSON.parse(boardJson) : boardJson;
+    return '<div class="mini-board">' + board.map(v => {
+      if(!v) return '<div class="cell" style="background:#0b1020;color:#2d364d">·</div>';
+      const cls = v <= 10 ? 'low' : v <= 20 ? 'mid' : 'high';
+      return `<div class="cell ${cls}">${v}</div>`;
+    }).join('') + '</div>';
+  }catch(e){
+    return '<span class="muted">-</span>';
+  }
+}
+
+function resultBadge(result){
+  if(result === 'win') return '<span class="badge win">WIN</span>';
+  if(result === 'lose') return '<span class="badge lose">LOSE</span>';
+  return '<span class="badge draw">DRAW</span>';
+}
+
+function mbtiBadge(mbti){
+  return mbti ? `<span class="badge mbti">${mbti}</span>` : '<span class="muted">-</span>';
+}
+
+async function fetchHealth(){
+  try{
+    const r = await fetch('/api/health');
+    const d = await r.json();
+    const dot = document.getElementById('health-dot');
+    const text = document.getElementById('health-text');
+    if(d.supabase_ready){
+      dot.style.background = 'var(--green)';
+      text.textContent = d.model_loaded ? `Supabase 연결됨 / 모델 로드 (${d.device.toUpperCase()})` : `Supabase 연결됨 / fallback AI (${d.device.toUpperCase()})`;
+    }else{
+      dot.style.background = 'var(--gold)';
+      text.textContent = 'Supabase 미연결';
+    }
+  }catch(e){
+    document.getElementById('health-dot').style.background = 'var(--red)';
+    document.getElementById('health-text').textContent = '서버 연결 실패';
+  }
+}
+
+function renderStats(d){
+  const s = d.stats || {};
+  const avg = d.averages || {};
+  document.getElementById('stats-row').innerHTML = `
+    <div class="card"><div class="stat-label">총 경기</div><div class="stat-value" style="color:var(--blue)">${d.total || 0}</div></div>
+    <div class="card"><div class="stat-label">플레이어 승리</div><div class="stat-value" style="color:var(--green)">${s.win || 0}</div></div>
+    <div class="card"><div class="stat-label">AI 승리</div><div class="stat-value" style="color:var(--red)">${s.lose || 0}</div></div>
+    <div class="card"><div class="stat-label">무승부</div><div class="stat-value" style="color:var(--gold)">${s.draw || 0}</div></div>
+    <div class="card"><div class="stat-label">평균 플레이어</div><div class="stat-value" style="color:var(--blue)">${Number(avg.avg_p || 0).toFixed(1)}</div></div>
+    <div class="card"><div class="stat-label">평균 AI</div><div class="stat-value" style="color:var(--purple)">${Number(avg.avg_a || 0).toFixed(1)}</div></div>
+  `;
+}
+
+function renderTable(page){
+  currentPage = page;
+  const search = document.getElementById('search').value.trim().toLowerCase();
+  const resultFilter = document.getElementById('result-filter').value;
+
+  let rows = cachedGames.slice();
+  if(search){
+    rows = rows.filter(g => {
+      const hay = [
+        g.player_name,
+        g.mbti,
+        g.age,
+        g.gender,
+        g.playtime,
+        g.result
+      ].join(' ').toLowerCase();
+      return hay.includes(search);
+    });
+  }
+  if(resultFilter){
+    rows = rows.filter(g => g.result === resultFilter);
+  }
+
+  const tb = document.getElementById('table-body');
+  if(!rows.length){
+    tb.innerHTML = '<tr><td colspan="8" class="empty">표시할 기록이 없습니다.</td></tr>';
+  }else{
+    tb.innerHTML = rows.map(g => `
+      <tr>
+        <td class="mono">${g.id}</td>
+        <td>${g.player_name || 'Anonymous'}</td>
+        <td>${mbtiBadge(g.mbti)}</td>
+        <td class="mono muted">${fmtTime(g.played_at)}</td>
+        <td>${renderBoard(g.player_board)}</td>
+        <td><span style="color:var(--blue)">${g.player_score}</span> : <span style="color:var(--purple)">${g.ai_score}</span></td>
+        <td>${resultBadge(g.result)}</td>
+        <td><button class="btn" style="padding:8px 12px" onclick="showDetail(${g.id})">보기</button></td>
+      </tr>
+    `).join('');
+  }
+
+  const pages = Math.max(1, Math.ceil(cachedTotal / 20));
+  let html = '';
+  for(let i=1;i<=pages;i++){
+    html += `<button class="page-btn ${i===page ? 'active' : ''}" onclick="loadRecords(${i})">${i}</button>`;
+  }
+  document.getElementById('pagination').innerHTML = html;
+}
+
+async function loadRecords(page){
+  currentPage = page;
+  try{
+    const r = await fetch(`/api/records?page=${page}&per_page=20`);
+    const d = await r.json();
+    cachedGames = d.games || [];
+    cachedTotal = d.total || 0;
+    renderStats(d);
+    renderTable(page);
+  }catch(e){
+    document.getElementById('table-body').innerHTML = '<tr><td colspan="8" class="empty">기록을 불러오지 못했습니다.</td></tr>';
+  }
+}
+
+function applyFilters(){
+  renderTable(currentPage);
+}
+
+async function showDetail(gid){
+  try{
+    const [recordsRes, turnsRes] = await Promise.all([
+      fetch('/api/records?page=1&per_page=999'),
+      fetch(`/api/records/${gid}/turns`)
+    ]);
+    const recordsData = await recordsRes.json();
+    const turnsData = await turnsRes.json();
+    const game = (recordsData.games || []).find(x => x.id === gid);
+
+    let html = `
+      <div class="modal-head">
+        <div>
+          <h2 style="margin:0 0 6px">Game #${gid}</h2>
+          <div class="muted">경기 상세 정보와 턴별 변화를 확인합니다.</div>
+        </div>
+        <button class="close" onclick="closeDetail()">×</button>
+      </div>
+    `;
+
+    if(game){
+      let turnSequence = [];
+      try{
+        turnSequence = JSON.parse(game.turn_sequence || '[]');
+      }catch(e){
+        turnSequence = [];
+      }
+      html += `
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+          ${game.age ? `<span class="chip">Age <b>${game.age}</b></span>` : ''}
+          ${game.gender ? `<span class="chip">Gender <b>${game.gender}</b></span>` : ''}
+          ${game.mbti ? `<span class="chip">MBTI <b>${game.mbti}</b></span>` : ''}
+          ${game.playtime ? `<span class="chip">Playtime <b>${game.playtime}</b></span>` : ''}
+        </div>
+        ${turnSequence.length ? `<div style="margin-bottom:14px"><div class="muted" style="margin-bottom:6px">Card Sequence</div>${turnSequence.map((v,i)=>`<span class="badge mbti" style="margin-right:6px">${i+1}:${v}</span>`).join(' ')}</div>` : ''}
+        ${game.survey_genres ? `<div style="margin-bottom:14px" class="muted">Genres: ${(() => {
+          try { return JSON.parse(game.survey_genres).map(x => `<span class="badge mbti" style="margin-right:6px">${x}</span>`).join(' '); } catch { return '-'; }
+        })()}</div>` : ''}
+        <div style="margin-bottom:14px">
+          <div class="muted" style="margin-bottom:6px">결과</div>
+          ${resultBadge(game.result)}
+          <span class="chip" style="margin-left:8px">Score <b>${game.player_score}</b> : <b>${game.ai_score}</b></span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+          <div class="card"><div class="stat-label">Player Board</div>${renderBoard(game.player_board)}</div>
+          <div class="card"><div class="stat-label">AI Board</div>${renderBoard(game.ai_board)}</div>
+        </div>
+      `;
+    }
+
+    const turns = turnsData.turns || [];
+    if(turns.length){
+      html += `
+        <div class="card" style="padding:0;overflow:hidden">
+          <table class="turn-table">
+            <thead>
+              <tr>
+                <th>Turn</th><th>Card</th><th>Card Order</th><th>Deck Index</th><th>Player Slot</th><th>AI Slot</th><th>P Score</th><th>AI Score</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${turns.map(t => `
+                <tr>
+                  <td class="mono">${t.turn_number}</td>
+                  <td class="mono" style="font-weight:800">${t.card_value}</td>
+                  <td class="mono">${t.card_order ?? t.turn_number}</td>
+                  <td class="mono">${t.deck_index ?? (t.turn_number - 1)}</td>
+                  <td class="mono">${t.player_slot + 1}</td>
+                  <td class="mono">${t.ai_slot + 1}</td>
+                  <td class="mono" style="color:var(--blue)">${t.player_score_after}</td>
+                  <td class="mono" style="color:var(--purple)">${t.ai_score_after}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }else{
+      html += '<div class="empty">턴 정보가 없습니다.</div>';
+    }
+
+    document.getElementById('detail-content').innerHTML = html;
+    document.getElementById('detail-modal').style.display = 'flex';
+  }catch(e){
+    alert('상세 정보를 불러오지 못했습니다.');
+  }
+}
+
+function closeDetail(){
+  document.getElementById('detail-modal').style.display = 'none';
+}
+
+function downloadCSV(){
+  window.location.href = '/api/records/download';
+}
+
+function analysisCard(title, data, labelKey, color){
+  if(!data || !data.length){
+    return `<div class="card"><h2 style="margin:0 0 8px">${title}</h2><div class="empty">데이터가 없습니다.</div></div>`;
+  }
+  const maxScore = Math.max(...data.map(x => Number(x.avg_score || 0)), 1);
+  const rows = data.map(row => {
+    const score = Number(row.avg_score || 0);
+    const pct = Math.max(5, Math.round(score / maxScore * 100));
+    const winRate = row.cnt ? Math.round((Number(row.wins || 0) / row.cnt) * 100) : 0;
+    return `
+      <div class="bar-row">
+        <div class="bar-label">${row[labelKey] || '?'}</div>
+        <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${color}">${score.toFixed(1)}</div></div>
+        <div class="bar-info">${row.cnt} games / ${winRate}%</div>
+      </div>
+    `;
+  }).join('');
+  return `<div class="card"><h2 style="margin:0 0 8px">${title}</h2>${rows}</div>`;
+}
+
+async function loadAnalysis(){
+  try{
+    const r = await fetch('/api/survey_stats');
+    const d = await r.json();
+    document.getElementById('analysis-grid').innerHTML = [
+      analysisCard('MBTI 평균 점수', d.mbti, 'mbti', 'linear-gradient(135deg,#f0c87e,#c87ef0)'),
+      analysisCard('나이 평균 점수', d.age, 'age', 'linear-gradient(135deg,#7ec8f0,#2ea668)'),
+      analysisCard('플레이시간 평균 점수', d.playtime, 'playtime', 'linear-gradient(135deg,#c87ef0,#7ec8f0)'),
+      analysisCard('성별 평균 점수', d.gender, 'gender', 'linear-gradient(135deg,#2ea668,#7ec8f0)'),
+    ].join('');
+  }catch(e){
+    document.getElementById('analysis-grid').innerHTML = '<div class="card"><div class="empty">분석 데이터를 불러오지 못했습니다.</div></div>';
+  }
+}
+
+function loadAll(){
+  loadRecords(1);
+  loadAnalysis();
+  fetchHealth();
+}
+
+document.getElementById('search').addEventListener('input', applyFilters);
+document.getElementById('result-filter').addEventListener('change', applyFilters);
+
+loadAll();
+</script>
+</body>
+</html>
