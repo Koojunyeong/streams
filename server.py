@@ -10,6 +10,8 @@ import json
 import os
 import random
 from datetime import datetime
+from functools import cmp_to_key
+from itertools import zip_longest
 
 import numpy as np
 from flask import Flask, Response, jsonify, request, send_file
@@ -87,6 +89,289 @@ def normalize_id(value):
         return int(value)
     except (TypeError, ValueError):
         return value
+
+
+def sanitize_phone_number(value):
+    return "".join(ch for ch in str(value or "") if ch.isdigit())
+
+
+def masked_phone_suffix(name, phone_number, duplicate_names):
+    digits = sanitize_phone_number(phone_number)
+    if not digits:
+        return f"{name} (미등록)"
+    suffix_len = 5 if duplicate_names.get(name, 0) > 1 else 4
+    suffix = digits[-suffix_len:] if len(digits) >= suffix_len else digits
+    return f"{name} ({suffix})"
+
+
+def compare_score_vectors(left, right):
+    for l_score, r_score in zip_longest(left, right, fillvalue=-1):
+        if l_score != r_score:
+            return -1 if l_score > r_score else 1
+    return 0
+
+
+def build_leaderboards(player_rows, game_rows, target_player_id=None):
+    players = {normalize_id(row["id"]): row for row in player_rows if row.get("id") is not None}
+    stats = {}
+    for game in game_rows:
+        pid = normalize_id(game.get("player_id"))
+        player = players.get(pid)
+        if not player:
+            continue
+        phone_number = sanitize_phone_number(player.get("phone_number", ""))
+        if not phone_number:
+            continue
+        entry = stats.setdefault(
+            pid,
+            {
+                "player_id": pid,
+                "player_name": player.get("player_name") or game.get("player_name") or "Anonymous",
+                "phone_number": phone_number,
+                "wins": 0,
+                "games_played": 0,
+                "scores": [],
+                "best_score": 0,
+                "latest_played_at": "",
+            },
+        )
+        score = int(game.get("player_score") or 0)
+        entry["games_played"] += 1
+        entry["scores"].append(score)
+        entry["best_score"] = max(entry["best_score"], score)
+        if game.get("result") == "win":
+            entry["wins"] += 1
+        played_at = game.get("played_at") or ""
+        if played_at > entry["latest_played_at"]:
+            entry["latest_played_at"] = played_at
+
+    entries = []
+    for entry in stats.values():
+        entry["scores"].sort(reverse=True)
+        entry["score_vector"] = entry["scores"][:]
+        entries.append(entry)
+
+    name_counts = {}
+    for entry in entries:
+        name_counts[entry["player_name"]] = name_counts.get(entry["player_name"], 0) + 1
+    for entry in entries:
+        entry["display_name"] = masked_phone_suffix(entry["player_name"], entry["phone_number"], name_counts)
+
+    def wins_cmp(left, right):
+        if left["wins"] != right["wins"]:
+            return -1 if left["wins"] > right["wins"] else 1
+        if left["best_score"] != right["best_score"]:
+            return -1 if left["best_score"] > right["best_score"] else 1
+        vec_cmp = compare_score_vectors(left["score_vector"], right["score_vector"])
+        if vec_cmp:
+            return vec_cmp
+        if left["games_played"] != right["games_played"]:
+            return -1 if left["games_played"] > right["games_played"] else 1
+        if left["latest_played_at"] != right["latest_played_at"]:
+            return -1 if left["latest_played_at"] > right["latest_played_at"] else 1
+        if left["player_id"] == right["player_id"]:
+            return 0
+        return -1 if left["player_id"] < right["player_id"] else 1
+
+    def score_cmp(left, right):
+        if left["best_score"] != right["best_score"]:
+            return -1 if left["best_score"] > right["best_score"] else 1
+        vec_cmp = compare_score_vectors(left["score_vector"], right["score_vector"])
+        if vec_cmp:
+            return vec_cmp
+        if left["wins"] != right["wins"]:
+            return -1 if left["wins"] > right["wins"] else 1
+        if left["games_played"] != right["games_played"]:
+            return -1 if left["games_played"] > right["games_played"] else 1
+        if left["latest_played_at"] != right["latest_played_at"]:
+            return -1 if left["latest_played_at"] > right["latest_played_at"] else 1
+        if left["player_id"] == right["player_id"]:
+            return 0
+        return -1 if left["player_id"] < right["player_id"] else 1
+
+    wins_ranked = sorted(entries, key=cmp_to_key(wins_cmp))
+    scores_ranked = sorted(entries, key=cmp_to_key(score_cmp))
+
+    def serialize_rows(rows, value_key):
+        data = []
+        for idx, row in enumerate(rows[:10], start=1):
+            data.append(
+                {
+                    "rank": idx,
+                    "player_id": row["player_id"],
+                    "player_name": row["player_name"],
+                    "display_name": row["display_name"],
+                    "wins": row["wins"],
+                    "best_score": row["best_score"],
+                    "games_played": row["games_played"],
+                    "value": row[value_key],
+                }
+            )
+        return data
+
+    player_summary = None
+    if target_player_id is not None:
+        target = normalize_id(target_player_id)
+        wins_pos = next((idx for idx, row in enumerate(wins_ranked, start=1) if row["player_id"] == target), None)
+        score_pos = next((idx for idx, row in enumerate(scores_ranked, start=1) if row["player_id"] == target), None)
+        current = stats.get(target)
+        if current:
+            player_summary = {
+                "player_id": target,
+                "display_name": current["display_name"],
+                "wins_rank": wins_pos,
+                "score_rank": score_pos,
+                "wins": current["wins"],
+                "best_score": current["best_score"],
+                "games_played": current["games_played"],
+            }
+
+    return {
+        "wins": serialize_rows(wins_ranked, "wins"),
+        "scores": serialize_rows(scores_ranked, "best_score"),
+        "player": player_summary,
+    }
+
+
+def masked_phone_suffix(name, phone_number, duplicate_names):
+    digits = sanitize_phone_number(phone_number)
+    if not digits:
+        return f"{name} (미등록)"
+    suffix_len = 5 if duplicate_names.get(name, 0) > 1 else 4
+    suffix = digits[-suffix_len:] if len(digits) >= suffix_len else digits
+    return f"{name} ({suffix})"
+
+
+def build_leaderboards(player_rows, game_rows, target_player_id=None):
+    players = {normalize_id(row["id"]): row for row in player_rows if row.get("id") is not None}
+    stats = {}
+
+    for game in game_rows:
+        pid = normalize_id(game.get("player_id"))
+        player = players.get(pid)
+        if not player:
+            continue
+
+        phone_number = sanitize_phone_number(player.get("phone_number", ""))
+        if not phone_number:
+            continue
+
+        entry = stats.setdefault(
+            phone_number,
+            {
+                "player_id": pid,
+                "player_name": player.get("player_name") or game.get("player_name") or "Anonymous",
+                "phone_number": phone_number,
+                "wins": 0,
+                "games_played": 0,
+                "scores": [],
+                "best_score": 0,
+                "latest_played_at": "",
+                "identity_key": phone_number,
+            },
+        )
+
+        score = int(game.get("player_score") or 0)
+        entry["games_played"] += 1
+        entry["scores"].append(score)
+        entry["best_score"] = max(entry["best_score"], score)
+        if game.get("result") == "win":
+            entry["wins"] += 1
+
+        played_at = game.get("played_at") or ""
+        if played_at >= entry["latest_played_at"]:
+            entry["latest_played_at"] = played_at
+            entry["player_id"] = pid
+            entry["player_name"] = player.get("player_name") or game.get("player_name") or entry["player_name"]
+
+    entries = []
+    for entry in stats.values():
+        entry["scores"].sort(reverse=True)
+        entry["score_vector"] = entry["scores"][:]
+        entries.append(entry)
+
+    name_counts = {}
+    for entry in entries:
+        name_counts[entry["player_name"]] = name_counts.get(entry["player_name"], 0) + 1
+    for entry in entries:
+        entry["display_name"] = masked_phone_suffix(entry["player_name"], entry["phone_number"], name_counts)
+
+    def wins_cmp(left, right):
+        if left["wins"] != right["wins"]:
+            return -1 if left["wins"] > right["wins"] else 1
+        if left["best_score"] != right["best_score"]:
+            return -1 if left["best_score"] > right["best_score"] else 1
+        vec_cmp = compare_score_vectors(left["score_vector"], right["score_vector"])
+        if vec_cmp:
+            return vec_cmp
+        if left["games_played"] != right["games_played"]:
+            return -1 if left["games_played"] > right["games_played"] else 1
+        if left["latest_played_at"] != right["latest_played_at"]:
+            return -1 if left["latest_played_at"] > right["latest_played_at"] else 1
+        if left["identity_key"] == right["identity_key"]:
+            return 0
+        return -1 if left["identity_key"] < right["identity_key"] else 1
+
+    def score_cmp(left, right):
+        if left["best_score"] != right["best_score"]:
+            return -1 if left["best_score"] > right["best_score"] else 1
+        vec_cmp = compare_score_vectors(left["score_vector"], right["score_vector"])
+        if vec_cmp:
+            return vec_cmp
+        if left["wins"] != right["wins"]:
+            return -1 if left["wins"] > right["wins"] else 1
+        if left["games_played"] != right["games_played"]:
+            return -1 if left["games_played"] > right["games_played"] else 1
+        if left["latest_played_at"] != right["latest_played_at"]:
+            return -1 if left["latest_played_at"] > right["latest_played_at"] else 1
+        if left["identity_key"] == right["identity_key"]:
+            return 0
+        return -1 if left["identity_key"] < right["identity_key"] else 1
+
+    wins_ranked = sorted(entries, key=cmp_to_key(wins_cmp))
+    scores_ranked = sorted(entries, key=cmp_to_key(score_cmp))
+
+    def serialize_rows(rows, value_key):
+        data = []
+        for idx, row in enumerate(rows[:10], start=1):
+            data.append(
+                {
+                    "rank": idx,
+                    "player_id": row["player_id"],
+                    "player_name": row["player_name"],
+                    "display_name": row["display_name"],
+                    "wins": row["wins"],
+                    "best_score": row["best_score"],
+                    "games_played": row["games_played"],
+                    "value": row[value_key],
+                }
+            )
+        return data
+
+    player_summary = None
+    if target_player_id is not None:
+        target = normalize_id(target_player_id)
+        target_player = players.get(target)
+        target_phone = sanitize_phone_number(target_player.get("phone_number", "")) if target_player else ""
+        wins_pos = next((idx for idx, row in enumerate(wins_ranked, start=1) if row["identity_key"] == target_phone), None)
+        score_pos = next((idx for idx, row in enumerate(scores_ranked, start=1) if row["identity_key"] == target_phone), None)
+        current = stats.get(target_phone)
+        if current:
+            player_summary = {
+                "player_id": current["player_id"],
+                "display_name": current["display_name"],
+                "wins_rank": wins_pos,
+                "score_rank": score_pos,
+                "wins": current["wins"],
+                "best_score": current["best_score"],
+                "games_played": current["games_played"],
+            }
+
+    return {
+        "wins": serialize_rows(wins_ranked, "wins"),
+        "scores": serialize_rows(scores_ranked, "best_score"),
+        "player": player_summary,
+    }
 
 
 def fetch_all_rows(table, columns="*", chunk_size=1000, order_by=None, desc=False, filters=None):
@@ -300,17 +585,34 @@ def save_survey():
 
     d = request.json
     payload = {
-        "player_name": d.get("player_name", "Anonymous"),
+        "player_name": (d.get("player_name", "Anonymous") or "Anonymous").strip(),
+        "phone_number": sanitize_phone_number(d.get("phone_number", "")),
         "age": d.get("age", ""),
         "gender": d.get("gender", ""),
         "mbti": d.get("mbti", ""),
         "playtime": d.get("playtime", ""),
         "genres": d.get("genres", []),
     }
+    if len(payload["phone_number"]) < 8:
+        return jsonify({"status": "error", "message": "Phone number is required"}), 400
     try:
-        resp = sb().table("players").insert(payload).execute()
-        data = resp_data(resp)
-        pid = data[0]["id"] if data else None
+        existing_resp = (
+            sb()
+            .table("players")
+            .select("id")
+            .eq("phone_number", payload["phone_number"])
+            .order("id", desc=True)
+            .limit(1)
+            .execute()
+        )
+        existing_rows = resp_data(existing_resp)
+        if existing_rows:
+            pid = existing_rows[0]["id"]
+            sb().table("players").update(payload).eq("id", pid).execute()
+        else:
+            resp = sb().table("players").insert(payload).execute()
+            data = resp_data(resp)
+            pid = data[0]["id"] if data else None
         return jsonify({"status": "saved", "player_id": pid})
     except Exception as exc:
         return jsonify({"status": "error", "message": str(exc)}), 500
@@ -394,7 +696,7 @@ def get_records():
         player_ids = sorted({normalize_id(g["player_id"]) for g in games if g.get("player_id") is not None})
         players_map = {}
         if player_ids:
-            players_resp = sb().table("players").select("id, age, gender, mbti, playtime, genres").in_("id", player_ids).execute()
+            players_resp = sb().table("players").select("id, phone_number, age, gender, mbti, playtime, genres").in_("id", player_ids).execute()
             players_map = {normalize_id(row["id"]): row for row in resp_data(players_resp)}
 
         merged_games = []
@@ -405,6 +707,7 @@ def get_records():
             merged["gender"] = p.get("gender", "")
             merged["mbti"] = p.get("mbti", "")
             merged["playtime"] = p.get("playtime", "")
+            merged["phone_number"] = p.get("phone_number", "")
             merged["survey_genres"] = json.dumps(p.get("genres", []))
             merged["deck"] = json.dumps(merged.get("deck", []))
             merged["turn_sequence"] = json.dumps(merged.get("turn_sequence", []))
@@ -463,7 +766,7 @@ def download_csv():
         player_ids = sorted({normalize_id(g["player_id"]) for g in games if g.get("player_id") is not None})
         players_map = {}
         if player_ids:
-            players_resp = sb().table("players").select("id, age, gender, mbti, playtime, genres").in_("id", player_ids).execute()
+            players_resp = sb().table("players").select("id, phone_number, age, gender, mbti, playtime, genres").in_("id", player_ids).execute()
             players_map = {normalize_id(row["id"]): row for row in resp_data(players_resp)}
 
         out = io.StringIO()
@@ -472,6 +775,7 @@ def download_csv():
             [
                 "ID",
                 "Player",
+                "Phone",
                 "Age",
                 "Gender",
                 "MBTI",
@@ -493,6 +797,7 @@ def download_csv():
                 [
                     g.get("id"),
                     g.get("player_name", "Anonymous"),
+                    p.get("phone_number", ""),
                     p.get("age", ""),
                     p.get("gender", ""),
                     p.get("mbti", ""),
@@ -530,16 +835,16 @@ def survey_stats():
 
     try:
         games = fetch_all_rows("games", columns="player_id,player_score,ai_score,result")
-        player_ids = sorted({g["player_id"] for g in games if g.get("player_id") is not None})
+        player_ids = sorted({normalize_id(g["player_id"]) for g in games if g.get("player_id") is not None})
         players_map = {}
         if player_ids:
             players_resp = sb().table("players").select("id, age, gender, mbti, playtime").in_("id", player_ids).execute()
-            players_map = {row["id"]: row for row in resp_data(players_resp)}
+            players_map = {normalize_id(row["id"]): row for row in resp_data(players_resp)}
 
         def bucket_stats(key_name):
             grouped = {}
             for g in games:
-                pid = g.get("player_id")
+                pid = normalize_id(g.get("player_id"))
                 p = players_map.get(pid)
                 if not p:
                     continue
@@ -572,6 +877,21 @@ def survey_stats():
                 "gender": bucket_stats("gender"),
             }
         )
+    except Exception as exc:
+        return jsonify({"status": "error", "message": str(exc)}), 500
+
+
+@app.route("/api/leaderboard")
+def leaderboard():
+    err = require_supabase()
+    if err:
+        return err
+
+    try:
+        target_player_id = request.args.get("player_id")
+        player_rows = fetch_all_rows("players", columns="id,player_name,phone_number")
+        game_rows = fetch_all_rows("games", columns="player_id,player_name,player_score,result,played_at")
+        return jsonify(build_leaderboards(player_rows, game_rows, target_player_id=target_player_id))
     except Exception as exc:
         return jsonify({"status": "error", "message": str(exc)}), 500
 

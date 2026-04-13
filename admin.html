@@ -131,6 +131,7 @@
             <tr>
               <th>ID</th>
               <th>Player</th>
+              <th>Phone</th>
               <th>MBTI</th>
               <th>Played At</th>
               <th>Board</th>
@@ -140,7 +141,7 @@
             </tr>
           </thead>
           <tbody id="table-body">
-            <tr><td colspan="8" class="empty">불러오는 중...</td></tr>
+            <tr><td colspan="9" class="empty">불러오는 중...</td></tr>
           </tbody>
         </table>
       </div>
@@ -194,6 +195,14 @@ function mbtiBadge(mbti){
   return mbti ? `<span class="badge mbti">${mbti}</span>` : '<span class="muted">-</span>';
 }
 
+function formatPhone(phone){
+  const digits = String(phone || '').replace(/\D/g,'');
+  if(!digits) return '-';
+  if(digits.length === 11) return `${digits.slice(0,3)}-${digits.slice(3,7)}-${digits.slice(7)}`;
+  if(digits.length === 10) return `${digits.slice(0,3)}-${digits.slice(3,6)}-${digits.slice(6)}`;
+  return digits;
+}
+
 async function fetchHealth(){
   try{
     const r = await fetch('/api/health');
@@ -236,10 +245,12 @@ function renderTable(page){
     rows = rows.filter(g => {
       const hay = [
         g.player_name,
+        g.phone_number,
         g.mbti,
         g.age,
         g.gender,
         g.playtime,
+        g.survey_genres,
         g.result
       ].join(' ').toLowerCase();
       return hay.includes(search);
@@ -251,12 +262,13 @@ function renderTable(page){
 
   const tb = document.getElementById('table-body');
   if(!rows.length){
-    tb.innerHTML = '<tr><td colspan="8" class="empty">표시할 기록이 없습니다.</td></tr>';
+    tb.innerHTML = '<tr><td colspan="9" class="empty">표시할 기록이 없습니다.</td></tr>';
   }else{
     tb.innerHTML = rows.map(g => `
       <tr>
         <td class="mono">${g.id}</td>
         <td>${g.player_name || 'Anonymous'}</td>
+        <td class="mono">${formatPhone(g.phone_number)}</td>
         <td>${mbtiBadge(g.mbti)}</td>
         <td class="mono muted">${fmtTime(g.played_at)}</td>
         <td>${renderBoard(g.player_board)}</td>
@@ -285,7 +297,7 @@ async function loadRecords(page){
     renderStats(d);
     renderTable(page);
   }catch(e){
-    document.getElementById('table-body').innerHTML = '<tr><td colspan="8" class="empty">기록을 불러오지 못했습니다.</td></tr>';
+    document.getElementById('table-body').innerHTML = '<tr><td colspan="9" class="empty">기록을 불러오지 못했습니다.</td></tr>';
   }
 }
 
@@ -322,6 +334,7 @@ async function showDetail(gid){
       }
       html += `
         <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+          ${game.phone_number ? `<span class="chip">Phone <b>${formatPhone(game.phone_number)}</b></span>` : ''}
           ${game.age ? `<span class="chip">Age <b>${game.age}</b></span>` : ''}
           ${game.gender ? `<span class="chip">Gender <b>${game.gender}</b></span>` : ''}
           ${game.mbti ? `<span class="chip">MBTI <b>${game.mbti}</b></span>` : ''}

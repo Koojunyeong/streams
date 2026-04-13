@@ -75,6 +75,19 @@
   .btn-secondary:hover{border-color:var(--purple)}
 
   .record{margin-top:12px;color:var(--dim);font-size:13px}
+  .leaderboard-panel{margin-top:18px;background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:18px 20px;max-width:860px;width:100%}
+  .leaderboard-panel h3{font-size:16px;color:var(--gold);margin-bottom:12px}
+  .leaderboard-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+  .leaderboard-card{background:rgba(13,17,23,.72);border:1px solid var(--border);border-radius:12px;padding:12px}
+  .leaderboard-card h4{font-size:13px;color:var(--blue);margin-bottom:10px;letter-spacing:1px;text-transform:uppercase}
+  .leaderboard-list{display:flex;flex-direction:column;gap:8px}
+  .leaderboard-item{display:grid;grid-template-columns:42px 1fr auto;gap:8px;align-items:center;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,.02)}
+  .leaderboard-rank{font-family:var(--mono);font-size:16px;font-weight:800;color:var(--gold)}
+  .leaderboard-name{font-size:13px;font-weight:700}
+  .leaderboard-sub{font-size:11px;color:var(--dim);margin-top:2px}
+  .leaderboard-value{font-family:var(--mono);font-size:14px;font-weight:800;color:var(--blue)}
+  .leaderboard-empty{font-size:12px;color:var(--dim);padding:8px 0}
+  .leaderboard-summary{margin-top:12px;padding:10px 12px;border-radius:10px;background:rgba(126,200,240,.08);font-size:12px;color:var(--text)}
 
   /* ─── GAME ─── */
   #game{display:none;flex-direction:column;align-items:center;width:100%;max-width:1120px;padding:16px 12px}
@@ -149,6 +162,7 @@
 
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
   @keyframes popIn{0%{transform:scale(.5);opacity:0}70%{transform:scale(1.1)}100%{transform:scale(1);opacity:1}}
+  @media (max-width: 900px){.leaderboard-grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -177,6 +191,10 @@
     <span id="status-text">서버 연결 확인 중...</span>
   </div>
   <div class="record" id="record"></div>
+  <div class="leaderboard-panel" id="menu-leaderboard">
+    <h3>실시간 순위표</h3>
+    <div class="leaderboard-empty">순위 데이터를 불러오는 중...</div>
+  </div>
   <button class="btn-start" onclick="showSurvey()">게임 시작</button>
 </div>
 
@@ -190,6 +208,11 @@
     <div class="field">
       <div class="field-label">닉네임 <span class="req">*</span></div>
       <input class="text-input" id="s-name" placeholder="이름을 입력하세요" maxlength="20">
+    </div>
+
+    <div class="field">
+      <div class="field-label">전화번호 <span class="req">*</span></div>
+      <input class="text-input" id="s-phone" placeholder="숫자만 입력하세요" inputmode="numeric" maxlength="13">
     </div>
 
     <!-- 나이 -->
@@ -329,6 +352,7 @@ const SURVEY_DRAFT_KEY='streams-survey-draft';
 function surveyDraft(){
   return {
     name:document.getElementById('s-name').value.trim(),
+    phone:document.getElementById('s-phone').value.trim(),
     age:getRadioValue('s-age'),
     gender:getRadioValue('s-gender'),
     mbti:getRadioValue('s-mbti'),
@@ -363,11 +387,15 @@ function restoreSurveyDraft(){
   }
   if(!draft)return;
   document.getElementById('s-name').value=draft.name||'';
+  document.getElementById('s-phone').value=draft.phone||'';
   applyRadioValue('s-age', draft.age);
   applyRadioValue('s-gender', draft.gender);
   applyRadioValue('s-mbti', draft.mbti);
   applyRadioValue('s-playtime', draft.playtime);
   applyCheckValues('s-genres', draft.genres);
+}
+function sanitizePhone(value){
+  return (value||'').replace(/\D/g,'');
 }
 function selectRadio(groupId,el){
   document.querySelectorAll(`#${groupId} .radio-btn, #${groupId} .mbti-btn`).forEach(b=>b.classList.remove('selected'));
@@ -396,6 +424,7 @@ function backToMenu(){
 
 async function submitSurveyAndStart(){
   const name=document.getElementById('s-name').value.trim();
+  const phone=sanitizePhone(document.getElementById('s-phone').value);
   const age=getRadioValue('s-age');
   const gender=getRadioValue('s-gender');
   const mbti=getRadioValue('s-mbti');
@@ -404,7 +433,7 @@ async function submitSurveyAndStart(){
 
   // 유효성 검사
   const errEl=document.getElementById('survey-error');
-  if(!name||!age||!gender||!mbti||!playtime){
+  if(!name||phone.length<8||!age||!gender||!mbti||!playtime){
     errEl.textContent='⚠ 모든 필수 항목을 선택해주세요.';errEl.style.display='block';return;
   }
   errEl.style.display='none';
@@ -414,7 +443,7 @@ async function submitSurveyAndStart(){
   // 설문 서버 저장
   try{
     const res=await fetch('/api/save_survey',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({player_name:name,age,gender,mbti,playtime,genres})});
+      body:JSON.stringify({player_name:name,phone_number:phone,age,gender,mbti,playtime,genres})});
     const data=await res.json();
     if(!res.ok || !data.player_id){
       throw new Error(data.message || '설문 저장 실패');
@@ -488,6 +517,52 @@ async function saveGame(result){
     body:JSON.stringify({player_id:playerId,player_name:playerName,deck,player_board:pBoard,ai_board:aBoard,
       player_score:ps,ai_score:as_,result,turns:turnLog})});return true}catch(e){return false}}
 
+/*
+function leaderboardSection(title,rows,valueLabel){
+  if(!rows||!rows.length){
+    return `<div class="leaderboard-card"><h4>${title}</h4><div class="leaderboard-empty">아직 집계된 기록이 없습니다.</div></div>`;
+  }
+  return `<div class="leaderboard-card"><h4>${title}</h4><div class="leaderboard-list">${
+    rows.slice(0,5).map(row=>`
+      <div class="leaderboard-item">
+        <div class="leaderboard-rank">#${row.rank}</div>
+        <div>
+          <div class="leaderboard-name">${row.display_name}</div>
+          <div class="leaderboard-sub">${row.wins}승 · 최고 ${row.best_score}점 · ${row.games_played}판</div>
+        </div>
+        <div class="leaderboard-value">${row.value}${valueLabel}</div>
+      </div>
+    `).join('')
+  }</div></div>`;
+}
+
+function leaderboardMarkup(data,showSummary){
+  if(!data){
+    return '<div class="leaderboard-empty">순위 데이터를 불러오지 못했습니다.</div>';
+  }
+  const summary=(showSummary&&data.player)?`<div class="leaderboard-summary">내 순위: 최다승 ${data.player.wins_rank||'-'}위 · 최고점 ${data.player.score_rank||'-'}위</div>`:'';
+  return `<div class="leaderboard-grid">${
+    leaderboardSection('최다승', data.wins || [], '승') +
+    leaderboardSection('최고점', data.scores || [], '점')
+  }</div>${summary}`;
+}
+
+async function fetchLeaderboard(targetPlayerId){
+  try{
+    const query=targetPlayerId?`?player_id=${encodeURIComponent(targetPlayerId)}`:'';
+    const res=await fetch(`/api/leaderboard${query}`);
+    if(!res.ok) throw new Error('leaderboard fetch failed');
+    return await res.json();
+  }catch(e){
+    return null;
+  }
+}
+
+async function renderMenuLeaderboard(){
+  const data=await fetchLeaderboard();
+  document.getElementById('menu-leaderboard').innerHTML=`<h3>실시간 순위표</h3>${leaderboardMarkup(data,false)}`;
+}
+
 function startGame(){
   document.getElementById('survey').style.display='none';
   deck=shuffle(buildPool()).slice(0,20);ci=0;pBoard=Array(20).fill(0);aBoard=Array(20).fill(0);
@@ -536,9 +611,227 @@ async function endGame(){
 function goMenu(){document.getElementById('game').style.display='none';document.getElementById('menu').style.display='flex';updateRecord()}
 function updateRecord(){const t=history.w+history.l+history.d;if(t>0)document.getElementById('record').textContent=`전적: ${history.w}승 ${history.l}패 ${history.d}무`}
 
+async function saveGame(result){
+  const ps=calcScore(pBoard),as_=calcScore(aBoard);
+  try{
+    const res=await fetch('/api/save_game',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({player_id:playerId,player_name:playerName,deck,player_board:pBoard,ai_board:aBoard,
+        player_score:ps,ai_score:as_,result,turns:turnLog})});
+    return res.ok;
+  }catch(e){
+    return false;
+  }
+}
+
+function leaderboardSection(title,rows,valueLabel){
+  if(!rows||!rows.length){
+    return `<div class="leaderboard-card"><h4>${title}</h4><div class="leaderboard-empty">아직 집계된 기록이 없습니다.</div></div>`;
+  }
+  return `<div class="leaderboard-card"><h4>${title}</h4><div class="leaderboard-list">${
+    rows.slice(0,5).map(row=>`
+      <div class="leaderboard-item">
+        <div class="leaderboard-rank">#${row.rank}</div>
+        <div>
+          <div class="leaderboard-name">${row.display_name}</div>
+          <div class="leaderboard-sub">${row.wins}승 · 최고 ${row.best_score}점 · ${row.games_played}판</div>
+        </div>
+        <div class="leaderboard-value">${row.value}${valueLabel}</div>
+      </div>
+    `).join('')
+  }</div></div>`;
+}
+
+function leaderboardMarkup(data,showSummary){
+  if(!data){
+    return '<div class="leaderboard-empty">순위 데이터를 불러오지 못했습니다.</div>';
+  }
+  const summary=(showSummary&&data.player)?`<div class="leaderboard-summary">내 순위: 최다승 #${data.player.wins_rank||'-'} · 최고점 #${data.player.score_rank||'-'}</div>`:'';
+  return `<div class="leaderboard-grid">${
+    leaderboardSection('최다승', data.wins || [], '승') +
+    leaderboardSection('최고점', data.scores || [], '점')
+  }</div>${summary}`;
+}
+
+async function fetchLeaderboard(targetPlayerId){
+  try{
+    const query=targetPlayerId?`?player_id=${encodeURIComponent(targetPlayerId)}`:'';
+    const res=await fetch(`/api/leaderboard${query}`);
+    if(!res.ok) throw new Error('leaderboard fetch failed');
+    return await res.json();
+  }catch(e){
+    return null;
+  }
+}
+
+async function renderMenuLeaderboard(){
+  const data=await fetchLeaderboard();
+  document.getElementById('menu-leaderboard').innerHTML=`<h3>실시간 순위표</h3>${leaderboardMarkup(data,false)}`;
+}
+
+async function endGame(){
+  gameActive=false;
+  const ps=calcScore(pBoard),as_=calcScore(aBoard);
+  let cls,msg,result;
+  if(ps>as_){cls='win';msg='당신의 승리!';result='win';history.w++}
+  else if(ps<as_){cls='lose';msg='AI 승리';result='lose';history.l++}
+  else{cls='draw';msg='무승부';result='draw';history.d++}
+  document.getElementById('card-area').style.display='none';
+  document.getElementById('round-display').textContent='END';
+  const saved=await saveGame(result);
+  const leaderboard=await fetchLeaderboard(playerId);
+  const saveMessage=saved
+    ? '<div class="result-saved">경기 기록이 저장되었습니다.</div>'
+    : '<div class="result-saved" style="color:#ffd36d">경기 기록 저장에 실패했습니다.</div>';
+  const ra=document.getElementById('result-area');
+  ra.style.display='block';
+  ra.innerHTML=`<div class="result-box ${cls}"><div class="result-msg">${msg}</div>
+    <div class="result-detail">${playerName} ${ps} : ${as_} AI</div>${saveMessage}
+    <div style="margin-top:16px">${leaderboardMarkup(leaderboard,true)}</div>
+    <button class="btn-retry" onclick="goMenu()">메뉴로</button>
+    <button class="btn-retry" onclick="startGame()" style="margin-left:8px">다시 하기</button></div>`;
+  renderPB();
+  renderAB();
+  updateRecord();
+  renderMenuLeaderboard();
+}
+
+function goMenu(){
+  document.getElementById('game').style.display='none';
+  document.getElementById('menu').style.display='flex';
+  updateRecord();
+  renderMenuLeaderboard();
+}
+
+function updateRecord(){
+  const t=history.w+history.l+history.d;
+  if(t>0) document.getElementById('record').textContent=`전적: ${history.w}승 ${history.l}패 ${history.d}무`;
+}
+
+*/
+
+async function saveGame(result){
+  const ps=calcScore(pBoard),as_=calcScore(aBoard);
+  try{
+    const res=await fetch('/api/save_game',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        player_id:playerId,
+        player_name:playerName,
+        deck,
+        player_board:pBoard,
+        ai_board:aBoard,
+        player_score:ps,
+        ai_score:as_,
+        result,
+        turns:turnLog
+      })
+    });
+    return res.ok;
+  }catch(e){
+    return false;
+  }
+}
+
+function leaderboardSection(title,rows,valueLabel){
+  if(!rows||!rows.length){
+    return `<div class="leaderboard-card"><h4>${title}</h4><div class="leaderboard-empty">No ranked records yet.</div></div>`;
+  }
+  return `<div class="leaderboard-card"><h4>${title}</h4><div class="leaderboard-list">${
+    rows.slice(0,5).map(row=>`
+      <div class="leaderboard-item">
+        <div class="leaderboard-rank">#${row.rank}</div>
+        <div>
+          <div class="leaderboard-name">${row.display_name}</div>
+          <div class="leaderboard-sub">${row.wins}W · Best ${row.best_score} · ${row.games_played} games</div>
+        </div>
+        <div class="leaderboard-value">${row.value}${valueLabel}</div>
+      </div>
+    `).join('')
+  }</div></div>`;
+}
+
+function leaderboardMarkup(data,showSummary){
+  if(!data){
+    return '<div class="leaderboard-empty">Failed to load leaderboard.</div>';
+  }
+  const summary=(showSummary&&data.player)
+    ? `<div class="leaderboard-summary">My rank: Wins #${data.player.wins_rank||'-'} · Best score #${data.player.score_rank||'-'}</div>`
+    : '';
+  return `<div class="leaderboard-grid">${
+    leaderboardSection('Most Wins', data.wins || [], 'W') +
+    leaderboardSection('High Score', data.scores || [], 'P')
+  }</div>${summary}`;
+}
+
+async function fetchLeaderboard(targetPlayerId){
+  try{
+    const query=targetPlayerId?`?player_id=${encodeURIComponent(targetPlayerId)}`:'';
+    const res=await fetch(`/api/leaderboard${query}`);
+    if(!res.ok) throw new Error('leaderboard fetch failed');
+    return await res.json();
+  }catch(e){
+    return null;
+  }
+}
+
+async function renderMenuLeaderboard(){
+  const data=await fetchLeaderboard();
+  document.getElementById('menu-leaderboard').innerHTML=`<h3>Leaderboard</h3>${leaderboardMarkup(data,false)}`;
+}
+
+async function endGame(){
+  gameActive=false;
+  const ps=calcScore(pBoard),as_=calcScore(aBoard);
+  let cls,msg,result;
+  if(ps>as_){cls='win';msg='You win!';result='win';history.w++}
+  else if(ps<as_){cls='lose';msg='AI wins';result='lose';history.l++}
+  else{cls='draw';msg='Draw';result='draw';history.d++}
+
+  document.getElementById('card-area').style.display='none';
+  document.getElementById('round-display').textContent='END';
+
+  const saved=await saveGame(result);
+  const leaderboard=await fetchLeaderboard(playerId);
+  const saveMessage=saved
+    ? '<div class="result-saved">Game record saved.</div>'
+    : '<div class="result-saved" style="color:#ffd36d">Failed to save game record.</div>';
+
+  const ra=document.getElementById('result-area');
+  ra.style.display='block';
+  ra.innerHTML=`<div class="result-box ${cls}">
+    <div class="result-msg">${msg}</div>
+    <div class="result-detail">${playerName} ${ps} : ${as_} AI</div>
+    ${saveMessage}
+    <div style="margin-top:16px">${leaderboardMarkup(leaderboard,true)}</div>
+    <button class="btn-retry" onclick="goMenu()">Menu</button>
+    <button class="btn-retry" onclick="startGame()" style="margin-left:8px">Play Again</button>
+  </div>`;
+
+  renderPB();
+  renderAB();
+  updateRecord();
+  renderMenuLeaderboard();
+}
+
+function goMenu(){
+  document.getElementById('game').style.display='none';
+  document.getElementById('menu').style.display='flex';
+  updateRecord();
+  renderMenuLeaderboard();
+}
+
+function updateRecord(){
+  const t=history.w+history.l+history.d;
+  if(t>0){
+    document.getElementById('record').textContent=`Record: ${history.w}W ${history.l}L ${history.d}D`;
+  }
+}
+
 restoreSurveyDraft();
 document.getElementById('s-name').addEventListener('input', saveSurveyDraft);
-checkServer();renderST();
+document.getElementById('s-phone').addEventListener('input', saveSurveyDraft);
+checkServer();renderST();renderMenuLeaderboard();
 </script>
 </body>
 </html>
