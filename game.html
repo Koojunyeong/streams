@@ -323,13 +323,58 @@ const ST={1:0,2:1,3:3,4:5,5:7,6:9,7:11,8:15,9:20,10:25,11:30,12:35,13:40,14:50,1
 let deck=[],ci=0,pBoard=Array(20).fill(0),aBoard=Array(20).fill(0),
     turnPhase='player',gameActive=false,lastAi=-1,lastQ=null,showQ=false,
     playerName='Anonymous',playerId=null,history={w:0,l:0,d:0},turnLog=[];
+const SURVEY_DRAFT_KEY='streams-survey-draft';
 
 // ─── Survey helpers ───
+function surveyDraft(){
+  return {
+    name:document.getElementById('s-name').value.trim(),
+    age:getRadioValue('s-age'),
+    gender:getRadioValue('s-gender'),
+    mbti:getRadioValue('s-mbti'),
+    playtime:getRadioValue('s-playtime'),
+    genres:getCheckValues('s-genres')
+  };
+}
+function saveSurveyDraft(){
+  localStorage.setItem(SURVEY_DRAFT_KEY, JSON.stringify(surveyDraft()));
+}
+function clearSurveyDraft(){
+  localStorage.removeItem(SURVEY_DRAFT_KEY);
+}
+function applyRadioValue(groupId,value){
+  if(!value)return;
+  const button=Array.from(document.querySelectorAll(`#${groupId} .radio-btn, #${groupId} .mbti-btn`))
+    .find(el=>el.textContent.trim()===value);
+  if(button)button.classList.add('selected');
+}
+function applyCheckValues(groupId,values){
+  const selected=new Set(values||[]);
+  document.querySelectorAll(`#${groupId} .check-btn`).forEach(el=>{
+    el.classList.toggle('selected', selected.has(el.textContent.trim()));
+  });
+}
+function restoreSurveyDraft(){
+  let draft=null;
+  try{
+    draft=JSON.parse(localStorage.getItem(SURVEY_DRAFT_KEY)||'null');
+  }catch(e){
+    draft=null;
+  }
+  if(!draft)return;
+  document.getElementById('s-name').value=draft.name||'';
+  applyRadioValue('s-age', draft.age);
+  applyRadioValue('s-gender', draft.gender);
+  applyRadioValue('s-mbti', draft.mbti);
+  applyRadioValue('s-playtime', draft.playtime);
+  applyCheckValues('s-genres', draft.genres);
+}
 function selectRadio(groupId,el){
   document.querySelectorAll(`#${groupId} .radio-btn, #${groupId} .mbti-btn`).forEach(b=>b.classList.remove('selected'));
   el.classList.add('selected');
+  saveSurveyDraft();
 }
-function toggleCheck(el){el.classList.toggle('selected')}
+function toggleCheck(el){el.classList.toggle('selected');saveSurveyDraft()}
 
 function getRadioValue(groupId){
   const sel=document.querySelector(`#${groupId} .selected`);
@@ -364,6 +409,7 @@ async function submitSurveyAndStart(){
   }
   errEl.style.display='none';
   playerName=name;
+  saveSurveyDraft();
 
   // 설문 서버 저장
   try{
@@ -374,6 +420,7 @@ async function submitSurveyAndStart(){
       throw new Error(data.message || '설문 저장 실패');
     }
     playerId=data.player_id;
+    clearSurveyDraft();
     startGame();
   }catch(e){
     errEl.textContent='설문 저장에 실패했습니다. 잠시 후 다시 시도해주세요.';
@@ -489,6 +536,8 @@ async function endGame(){
 function goMenu(){document.getElementById('game').style.display='none';document.getElementById('menu').style.display='flex';updateRecord()}
 function updateRecord(){const t=history.w+history.l+history.d;if(t>0)document.getElementById('record').textContent=`전적: ${history.w}승 ${history.l}패 ${history.d}무`}
 
+restoreSurveyDraft();
+document.getElementById('s-name').addEventListener('input', saveSurveyDraft);
 checkServer();renderST();
 </script>
 </body>
