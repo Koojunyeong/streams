@@ -13,6 +13,9 @@ from datetime import datetime, timedelta, timezone
 from functools import cmp_to_key
 from zoneinfo import ZoneInfo
 
+from dotenv import load_dotenv
+load_dotenv()
+
 import numpy as np
 from flask import Flask, Response, jsonify, request, send_file
 
@@ -473,26 +476,10 @@ def save_survey():
         "playtime": d.get("playtime", ""),
         "genres": d.get("genres", []),
     }
-    if len(payload["phone_number"]) < 8:
-        return jsonify({"status": "error", "message": "Phone number is required"}), 400
     try:
-        existing_resp = (
-            sb()
-            .table("players")
-            .select("id")
-            .eq("phone_number", payload["phone_number"])
-            .order("id", desc=True)
-            .limit(1)
-            .execute()
-        )
-        existing_rows = resp_data(existing_resp)
-        if existing_rows:
-            pid = existing_rows[0]["id"]
-            sb().table("players").update(payload).eq("id", pid).execute()
-        else:
-            resp = sb().table("players").insert(payload).execute()
-            data = resp_data(resp)
-            pid = data[0]["id"] if data else None
+        resp = sb().table("players").insert(payload).execute()
+        data = resp_data(resp)
+        pid = data[0]["id"] if data else None
         return jsonify({"status": "saved", "player_id": pid})
     except Exception as exc:
         return jsonify({"status": "error", "message": str(exc)}), 500
