@@ -216,7 +216,7 @@ def build_leaderboards(player_rows, game_rows, target_player_id=None):
 
         ranked = sorted(entries, key=cmp_to_key(compare_rank_entries))
         rows = []
-        for rank, entry in enumerate(ranked[:20], start=1):
+        for rank, entry in enumerate(ranked[:100], start=1):
             rows.append(
                 {
                     "rank": rank,

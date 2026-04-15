@@ -78,16 +78,22 @@
   .menu-actions{display:flex;gap:12px;align-items:center;justify-content:center;margin-top:22px;flex-wrap:wrap}
   .leaderboard-card{background:rgba(13,17,23,.72);border:1px solid var(--border);border-radius:16px;padding:14px}
   .leaderboard-list{display:flex;flex-direction:column;gap:10px}
-  .leaderboard-item{display:grid;grid-template-columns:44px 1fr auto;gap:10px;align-items:center;padding:10px 12px;border-radius:12px;background:rgba(255,255,255,.03)}
+  .leaderboard-item{display:grid;grid-template-columns:52px minmax(0,1fr);gap:12px;align-items:center;padding:12px 14px;border-radius:12px;background:rgba(255,255,255,.03)}
   .leaderboard-rank{font-family:var(--mono);font-size:16px;font-weight:800;color:var(--gold)}
-  .leaderboard-name{font-size:14px;font-weight:700}
-  .leaderboard-sub{font-size:11px;color:var(--dim);margin-top:3px}
-  .leaderboard-value{font-family:var(--mono);font-size:17px;font-weight:800;color:var(--blue);text-align:right}
-  .leaderboard-time{font-family:var(--mono);font-size:12px;color:var(--gold);margin-top:4px;text-align:right}
-  .leaderboard-date{font-size:11px;color:var(--dim);margin-top:2px;text-align:right}
+  .leaderboard-main{display:flex;align-items:center;justify-content:space-between;gap:14px;min-width:0}
+  .leaderboard-identity{display:flex;align-items:baseline;gap:10px;min-width:0}
+  .leaderboard-name{font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .leaderboard-date{font-size:11px;color:var(--dim);white-space:nowrap}
+  .leaderboard-stats{display:flex;align-items:center;gap:10px;flex-shrink:0;white-space:nowrap}
+  .leaderboard-value{font-family:var(--mono);font-size:16px;font-weight:800;color:var(--blue)}
+  .leaderboard-divider{font-size:11px;color:var(--faint)}
+  .leaderboard-time{font-family:var(--mono);font-size:12px;color:var(--gold)}
   .leaderboard-empty{font-size:12px;color:var(--dim);padding:18px 8px;text-align:center}
   .leaderboard-summary{margin-top:14px;padding:12px 14px;border-radius:12px;background:rgba(126,200,240,.08);font-size:12px;color:var(--text)}
   .leaderboard-meta{font-size:11px;color:var(--dim);margin:10px 0 12px}
+  .leaderboard-actions{display:flex;justify-content:center;margin-top:12px}
+  .leaderboard-more{padding:9px 16px;border-radius:999px;border:1px solid var(--border);background:var(--card);color:var(--text);cursor:pointer;font-size:12px;font-weight:700;transition:all .2s}
+  .leaderboard-more:hover{border-color:var(--blue);color:var(--blue)}
   .leaderboard-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
   .leaderboard-tab{padding:8px 14px;border-radius:999px;border:1px solid var(--border);background:var(--card);color:var(--dim);cursor:pointer;font-size:12px;font-weight:700;transition:all .2s}
   .leaderboard-tab:hover{border-color:var(--blue);color:var(--blue)}
@@ -173,7 +179,7 @@
 
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
   @keyframes popIn{0%{transform:scale(.5);opacity:0}70%{transform:scale(1.1)}100%{transform:scale(1);opacity:1}}
-  @media (max-width: 900px){.menu-actions{width:100%}.menu-actions .btn-start,.menu-actions .btn-secondary{width:100%}.modal-panel{padding:18px}.leaderboard-item{grid-template-columns:38px 1fr}.leaderboard-value,.leaderboard-time,.leaderboard-date{text-align:left}}
+  @media (max-width: 900px){.menu-actions{width:100%}.menu-actions .btn-start,.menu-actions .btn-secondary{width:100%}.modal-panel{padding:18px}.leaderboard-item{grid-template-columns:42px 1fr}.leaderboard-main{flex-direction:column;align-items:flex-start}.leaderboard-identity,.leaderboard-stats{width:100%}.leaderboard-stats{justify-content:flex-start;flex-wrap:wrap}}
 </style>
 </head>
 <body>
@@ -373,7 +379,7 @@ let deck=[],ci=0,pBoard=Array(20).fill(0),aBoard=Array(20).fill(0),
     turnPhase='player',gameActive=false,lastAi=-1,lastQ=null,showQ=false,
     playerName='Anonymous',playerId=null,history={w:0,l:0,d:0},turnLog=[],gameStartedAt=0;
 const SURVEY_DRAFT_KEY='streams-survey-draft';
-const leaderboardState={data:null,period:'overall',targetPlayerId:null};
+const leaderboardState={data:null,period:'overall',targetPlayerId:null,expanded:false};
 
 function surveyDraft(){
   return {
@@ -505,12 +511,27 @@ async function checkServer(){try{const res=await fetch('/api/health');const data
 async function requestAi(){try{const res=await fetch('/api/ai_move',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({board:aBoard,current_num:deck[ci],deck,current_index:ci})});return await res.json();}catch(e){const empty=aBoard.map((value,index)=>value===0?index:-1).filter(index=>index>=0);return{action:empty[Math.floor(Math.random()*empty.length)]||0,q_values:null};}}
 async function saveGame(result){const scores=updateScores();try{const res=await fetch('/api/save_game',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({player_id:playerId,player_name:playerName,deck,player_board:pBoard,ai_board:aBoard,player_score:scores.ps,ai_score:scores.as_,duration_ms:getElapsedDurationMs(),result,turns:turnLog})});return res.ok;}catch(e){return false;}}
 function leaderboardTabsMarkup(){return `<div class="leaderboard-tabs">${Object.entries(PERIOD_LABELS).map(([period,label])=>`<button class="leaderboard-tab ${leaderboardState.period===period?'active':''}" onclick="setLeaderboardPeriod('${period}')">${label}</button>`).join('')}</div>`;}
-function leaderboardRowsMarkup(rows){if(!rows||!rows.length){return '<div class="leaderboard-empty">아직 등록된 기록이 없습니다.</div>';}return `<div class="leaderboard-list">${rows.map(row=>`<div class="leaderboard-item"><div class="leaderboard-rank">#${row.rank}</div><div><div class="leaderboard-name">${row.display_name}</div><div class="leaderboard-sub">${row.played_at_label}</div></div><div><div class="leaderboard-value">${row.score}점</div><div class="leaderboard-time">${row.duration_label}</div><div class="leaderboard-date">${row.played_at_label}</div></div></div>`).join('')}</div>`;}
+function leaderboardRowsMarkup(rows){
+  if(!rows||!rows.length){
+    return '<div class="leaderboard-empty">아직 등록된 기록이 없습니다.</div>';
+  }
+  const visibleRows=leaderboardState.expanded?rows.slice(0,100):rows.slice(0,5);
+  return `<div class="leaderboard-list">${visibleRows.map(row=>`<div class="leaderboard-item"><div class="leaderboard-rank">#${row.rank}</div><div class="leaderboard-main"><div class="leaderboard-identity"><div class="leaderboard-name">${row.display_name}</div><div class="leaderboard-date">${row.played_at_label}</div></div><div class="leaderboard-stats"><div class="leaderboard-value">${row.score}점</div><div class="leaderboard-divider">/</div><div class="leaderboard-time">${row.duration_label}</div></div></div></div>`).join('')}</div>`;
+}
+function leaderboardActionMarkup(rows){
+  if(!rows||rows.length<=5){
+    return '';
+  }
+  const nextCount=Math.min(100, rows.length);
+  const label=leaderboardState.expanded?'상위 5위만 보기':`100위까지 보기 (${nextCount}명)`;
+  return `<div class="leaderboard-actions"><button class="leaderboard-more" onclick="toggleLeaderboardExpanded()">${label}</button></div>`;
+}
 function leaderboardSummaryMarkup(period){const summary=leaderboardState.data&&leaderboardState.data.player?leaderboardState.data.player[period]:null;if(!summary)return '';return `<div class="leaderboard-summary">내 현재 순위: ${summary.rank||'-'}위 / ${summary.score}점 / ${summary.duration_label}</div>`;}
-function renderLeaderboardModal(){const modalBody=document.getElementById('leaderboard-modal-body');const data=leaderboardState.data;if(!data||!data.periods){modalBody.innerHTML='<div class="leaderboard-empty">리더보드를 불러오지 못했습니다.</div>';return;}const periodData=data.periods[leaderboardState.period]||{rows:[]};modalBody.innerHTML=`${leaderboardTabsMarkup()}<div class="leaderboard-meta">정렬 기준: 높은 점수순, 동점일 때 더 짧은 시간 우선</div><div class="leaderboard-card">${leaderboardRowsMarkup(periodData.rows)}</div>${leaderboardSummaryMarkup(leaderboardState.period)}`;}
-function setLeaderboardPeriod(period){leaderboardState.period=period;renderLeaderboardModal();}
+function renderLeaderboardModal(){const modalBody=document.getElementById('leaderboard-modal-body');const data=leaderboardState.data;if(!data||!data.periods){modalBody.innerHTML='<div class="leaderboard-empty">리더보드를 불러오지 못했습니다.</div>';return;}const periodData=data.periods[leaderboardState.period]||{rows:[]};modalBody.innerHTML=`${leaderboardTabsMarkup()}<div class="leaderboard-meta">정렬 기준: 높은 점수순, 동점일 때 더 짧은 시간 우선</div><div class="leaderboard-card">${leaderboardRowsMarkup(periodData.rows)}${leaderboardActionMarkup(periodData.rows)}</div>${leaderboardSummaryMarkup(leaderboardState.period)}`;}
+function setLeaderboardPeriod(period){leaderboardState.period=period;leaderboardState.expanded=false;renderLeaderboardModal();}
+function toggleLeaderboardExpanded(){leaderboardState.expanded=!leaderboardState.expanded;renderLeaderboardModal();}
 async function fetchLeaderboard(targetPlayerId){try{const query=targetPlayerId?`?player_id=${encodeURIComponent(targetPlayerId)}`:'';const res=await fetch(`/api/leaderboard${query}`);if(!res.ok)throw new Error('leaderboard fetch failed');return await res.json();}catch(e){return null;}}
-async function openLeaderboardModal(targetPlayerId=null,period='overall'){leaderboardState.period=period;leaderboardState.targetPlayerId=targetPlayerId;document.getElementById('leaderboard-modal').style.display='flex';document.getElementById('leaderboard-modal-body').innerHTML='<div class="leaderboard-empty">리더보드를 불러오는 중입니다.</div>';leaderboardState.data=await fetchLeaderboard(targetPlayerId);renderLeaderboardModal();}
+async function openLeaderboardModal(targetPlayerId=null,period='overall'){leaderboardState.period=period;leaderboardState.targetPlayerId=targetPlayerId;leaderboardState.expanded=false;document.getElementById('leaderboard-modal').style.display='flex';document.getElementById('leaderboard-modal-body').innerHTML='<div class="leaderboard-empty">리더보드를 불러오는 중입니다.</div>';leaderboardState.data=await fetchLeaderboard(targetPlayerId);renderLeaderboardModal();}
 function closeLeaderboardModal(){document.getElementById('leaderboard-modal').style.display='none';}
 function startGame(){closeLeaderboardModal();document.getElementById('survey').style.display='none';deck=shuffle(buildPool()).slice(0,20);ci=0;pBoard=Array(20).fill(0);aBoard=Array(20).fill(0);turnPhase='player';gameActive=true;lastAi=-1;lastQ=null;turnLog=[];gameStartedAt=Date.now();document.getElementById('menu').style.display='none';document.getElementById('game').style.display='flex';document.getElementById('result-area').style.display='none';document.getElementById('result-area').innerHTML='';document.getElementById('card-area').style.display='flex';document.getElementById('round-display').textContent='1/20';document.getElementById('turn-msg').className='player-prompt';document.getElementById('turn-msg').textContent='카드를 배치하세요';document.getElementById('ai-note').textContent='';renderCard();renderPB();renderAB();updateScores();renderST();}
 async function place(index){if(!gameActive||turnPhase!=='player'||pBoard[index])return;const num=deck[ci];pBoard[index]=num;turnPhase='ai';renderPB();updateScores();const turnMsg=document.getElementById('turn-msg');turnMsg.className='ai-thinking';turnMsg.textContent='AI 계산 중...';const res=await requestAi();await new Promise(resolve=>setTimeout(resolve,400));const aiAction=res.action;aBoard[aiAction]=num;lastAi=aiAction;lastQ=res.q_values||null;document.getElementById('ai-note').textContent=`AI는 ${aiAction+1}번 칸에 배치`;renderAB();const {ps,as_}=updateScores();turnLog.push({turn:ci+1,card:num,card_order:ci+1,deck_index:ci,player_slot:index,ai_slot:aiAction,player_score_after:ps,ai_score_after:as_});ci++;if(ci>=20){endGame();return;}document.getElementById('round-display').textContent=`${ci+1}/20`;turnPhase='player';turnMsg.className='player-prompt';turnMsg.textContent='카드를 배치하세요';renderCard();renderPB();}
