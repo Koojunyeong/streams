@@ -144,9 +144,9 @@
     flex-direction:column;transition:all .2s;position:relative}
   .slot-empty{background:linear-gradient(135deg,#1a1a2e,#16213e);border:2px dashed #333;cursor:default}
   .slot-empty.clickable{cursor:pointer}.slot-empty.clickable:hover{transform:scale(1.08)}
-  .slot-empty.hl-safe{border-color:var(--green);background-color:#2ea66822}
-  .slot-empty.hl-valid{border-color:var(--yellow);background-color:#a6a62e22}
-  .slot-empty.hl-danger{border-color:var(--red);background-color:#a62e2e22}
+  .slot-empty.hl-safe{}
+  .slot-empty.hl-valid{}
+  .slot-empty.hl-danger{}
   .slot-index{color:var(--faint);font-size:11px;font-family:var(--mono)}
   .slot-filled{border:none}
   .ai-marker{position:absolute;top:-4px;right:-4px;width:8px;height:8px;border-radius:50%;
@@ -197,11 +197,6 @@
       <li>최종 보드에서 <b>오름차순 연속 구간</b>이 길수록 고득점!</li>
       <li>20칸 전부 오름차순이면 <b class="gold">300점 만점!</b></li>
     </ul>
-    <div class="guide-row">
-      <span><span class="guide-dot" style="background:var(--green)"></span> 안전</span>
-      <span><span class="guide-dot" style="background:var(--yellow)"></span> 가능</span>
-      <span><span class="guide-dot" style="background:var(--red)"></span> 위험</span>
-    </div>
   </div>
   <div class="status-bar">
     <span class="status-dot" id="status-dot" style="background:var(--red)"></span>
@@ -224,11 +219,6 @@
     <div class="field">
       <div class="field-label">닉네임 <span class="req">*</span></div>
       <input class="text-input" id="s-name" placeholder="이름을 입력하세요" maxlength="20">
-    </div>
-
-    <div class="field">
-      <div class="field-label">전화번호 <span class="req">*</span></div>
-      <input class="text-input" id="s-phone" placeholder="숫자만 입력하세요" inputmode="numeric" maxlength="13">
     </div>
 
     <!-- 나이 -->
@@ -384,7 +374,6 @@ const leaderboardState={data:null,period:'overall',targetPlayerId:null,expanded:
 function surveyDraft(){
   return {
     name:document.getElementById('s-name').value.trim(),
-    phone:document.getElementById('s-phone').value.trim(),
     age:getRadioValue('s-age'),
     gender:getRadioValue('s-gender'),
     mbti:getRadioValue('s-mbti'),
@@ -414,7 +403,6 @@ function restoreSurveyDraft(){
   try{draft=JSON.parse(localStorage.getItem(SURVEY_DRAFT_KEY)||'null');}catch(e){draft=null;}
   if(!draft)return;
   document.getElementById('s-name').value=draft.name||'';
-  document.getElementById('s-phone').value=draft.phone||'';
   applyRadioValue('s-age', draft.age);
   applyRadioValue('s-gender', draft.gender);
   applyRadioValue('s-mbti', draft.mbti);
@@ -456,7 +444,6 @@ function backToMenu(){
 }
 async function submitSurveyAndStart(){
   const name=document.getElementById('s-name').value.trim();
-  const phone=sanitizePhone(document.getElementById('s-phone').value);
   const age=getRadioValue('s-age');
   const gender=getRadioValue('s-gender');
   const mbti=getRadioValue('s-mbti');
@@ -464,7 +451,7 @@ async function submitSurveyAndStart(){
   const genres=getCheckValues('s-genres');
   const errEl=document.getElementById('survey-error');
 
-  if(!name||phone.length<8||!age||!gender||!mbti||!playtime){
+  if(!name||!age||!gender||!mbti||!playtime){
     errEl.textContent='모든 필수 항목을 선택해주세요.';
     errEl.style.display='block';
     return;
@@ -478,7 +465,7 @@ async function submitSurveyAndStart(){
     const res=await fetch('/api/save_survey',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({player_name:name,phone_number:phone,age,gender,mbti,playtime,genres})
+      body:JSON.stringify({player_name:name,age,gender,mbti,playtime,genres})
     });
     const data=await res.json();
     if(!res.ok||!data.player_id){
@@ -502,7 +489,7 @@ function getPM(board,num,deckList,currentIndex){const remaining=deckList.slice(c
 function cc(value){return value<=10?'card-low':value<=20?'card-mid':'card-high';}
 function cg(value){return value<=10?'card-glow-low':value<=20?'card-glow-mid':'card-glow-high';}
 function renderCard(){const num=deck[ci];document.getElementById('current-card').innerHTML=`<div class="number-card card-lg ${cc(num)} ${cg(num)}">${num}</div>`;}
-function renderPB(){const num=deck[ci]||0,validMask=turnPhase==='player'&&gameActive?getVM(pBoard,num):Array(20).fill(false),probMask=turnPhase==='player'&&gameActive?getPM(pBoard,num,deck,ci):Array(20).fill(false);let html='';for(let i=0;i<20;i++){if(pBoard[i]){html+=`<div class="slot slot-filled"><div class="number-card card-md ${cc(pBoard[i])}">${pBoard[i]}</div></div>`;}else{let highlight='',clickable='';if(gameActive&&turnPhase==='player'){clickable='clickable';highlight=probMask[i]?'hl-safe':validMask[i]?'hl-valid':'hl-danger';}html+=`<div class="slot slot-empty ${highlight} ${clickable}" onclick="place(${i})"><span class="slot-index">${i+1}</span></div>`;}}document.getElementById('player-board').innerHTML=html;}
+function renderPB(){const num=deck[ci]||0;let html='';for(let i=0;i<20;i++){if(pBoard[i]){html+=`<div class="slot slot-filled"><div class="number-card card-md ${cc(pBoard[i])}">${pBoard[i]}</div></div>`;}else{let clickable='';if(gameActive&&turnPhase==='player'){clickable='clickable';}html+=`<div class="slot slot-empty ${clickable}" onclick="place(${i})"><span class="slot-index">${i+1}</span></div>`;}}document.getElementById('player-board').innerHTML=html;}
 function renderAB(){let html='',qMin=0,qMax=1;if(lastQ){const values=lastQ.filter((_,index)=>aBoard[index]===0);if(values.length){qMin=Math.min(...values);qMax=Math.max(...values);}}for(let i=0;i<20;i++){if(aBoard[i]){const marker=i===lastAi?'<div class="ai-marker"></div>':'',pop=i===lastAi?'slot-pop':'';html+=`<div class="slot slot-filled ${pop}" style="position:relative">${marker}<div class="number-card card-md ${cc(aBoard[i])}">${aBoard[i]}</div></div>`;}else{let qbar='';if(showQ&&lastQ){const normalized=qMax>qMin?(lastQ[i]-qMin)/(qMax-qMin):0.5,height=Math.max(2,Math.round(normalized*50)),hue=Math.round(normalized*120);qbar=`<div class="q-bar" style="height:${height}%;background:hsl(${hue},70%,45%)"></div>`;}html+=`<div class="slot slot-empty" style="position:relative"><span class="slot-index">${i+1}</span>${qbar}</div>`;}}document.getElementById('ai-board').innerHTML=html;}
 function updateScores(){const ps=calcScore(pBoard),as_=calcScore(aBoard);document.getElementById('player-score').textContent=ps;document.getElementById('ai-score').textContent=as_;document.getElementById('player-count').textContent=`${pBoard.filter(Boolean).length}/20`;document.getElementById('ai-count').textContent=`${aBoard.filter(Boolean).length}/20`;return{ps,as_};}
 function renderST(){let html='';for(const [streak,points] of Object.entries(ST)){const color=points>=100?'var(--gold)':points>=30?'var(--purple)':'var(--blue)';html+=`<div class="score-table-item"><div class="streak">${streak}연속</div><div class="pts" style="color:${color}">${points}</div></div>`;}document.getElementById('score-table').innerHTML=html;}
@@ -541,7 +528,6 @@ function updateRecord(){const total=history.w+history.l+history.d;if(total>0){do
 
 restoreSurveyDraft();
 document.getElementById('s-name').addEventListener('input', saveSurveyDraft);
-document.getElementById('s-phone').addEventListener('input', saveSurveyDraft);
 checkServer();
 renderST();
 
