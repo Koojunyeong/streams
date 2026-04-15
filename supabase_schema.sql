@@ -21,6 +21,7 @@ create table if not exists public.games (
   ai_board jsonb not null,
   player_score integer not null,
   ai_score integer not null,
+  duration_ms bigint not null default 0,
   result text not null
 );
 

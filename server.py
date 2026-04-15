@@ -9,9 +9,9 @@ import io
 import json
 import os
 import random
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from functools import cmp_to_key
-from itertools import zip_longest
+from zoneinfo import ZoneInfo
 
 import numpy as np
 from flask import Flask, Response, jsonify, request, send_file
@@ -68,6 +68,9 @@ else:
 
 print(f"[Server Device] {DEVICE}")
 
+KST = ZoneInfo("Asia/Seoul")
+PERIOD_LABELS = {"overall": "Overall", "weekly": "7 Days", "daily": "24 Hours"}
+
 
 def sb():
     if not SUPABASE_AVAILABLE or SUPABASE_CLIENT is None:
@@ -98,153 +101,74 @@ def sanitize_phone_number(value):
 def masked_phone_suffix(name, phone_number, duplicate_names):
     digits = sanitize_phone_number(phone_number)
     if not digits:
-        return f"{name} (미등록)"
+        return f"{name} (unknown)"
     suffix_len = 5 if duplicate_names.get(name, 0) > 1 else 4
     suffix = digits[-suffix_len:] if len(digits) >= suffix_len else digits
     return f"{name} ({suffix})"
 
 
-def compare_score_vectors(left, right):
-    for l_score, r_score in zip_longest(left, right, fillvalue=-1):
-        if l_score != r_score:
-            return -1 if l_score > r_score else 1
-    return 0
+def parse_played_at(value):
+    if not value:
+        return None
+    text = str(value)
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
+def duration_sort_value(duration_ms):
+    try:
+        duration = int(duration_ms)
+    except (TypeError, ValueError):
+        return 10**15
+    return duration if duration > 0 else 10**15
+
+
+def format_duration_label(duration_ms):
+    duration = max(0, int(duration_ms or 0))
+    total_seconds = duration // 1000
+    minutes, seconds = divmod(total_seconds, 60)
+    return f"{minutes}:{seconds:02d}"
+
+
+def compare_rank_entries(left, right):
+    if left["player_score"] != right["player_score"]:
+        return -1 if left["player_score"] > right["player_score"] else 1
+
+    left_duration = duration_sort_value(left.get("duration_ms"))
+    right_duration = duration_sort_value(right.get("duration_ms"))
+    if left_duration != right_duration:
+        return -1 if left_duration < right_duration else 1
+
+    if left["played_at"] != right["played_at"]:
+        return -1 if left["played_at"] > right["played_at"] else 1
+
+    if left["identity_key"] == right["identity_key"]:
+        return 0
+    return -1 if left["identity_key"] < right["identity_key"] else 1
 
 
 def build_leaderboards(player_rows, game_rows, target_player_id=None):
     players = {normalize_id(row["id"]): row for row in player_rows if row.get("id") is not None}
-    stats = {}
-    for game in game_rows:
-        pid = normalize_id(game.get("player_id"))
-        player = players.get(pid)
-        if not player:
-            continue
-        phone_number = sanitize_phone_number(player.get("phone_number", ""))
-        if not phone_number:
-            continue
-        entry = stats.setdefault(
-            pid,
-            {
-                "player_id": pid,
-                "player_name": player.get("player_name") or game.get("player_name") or "Anonymous",
-                "phone_number": phone_number,
-                "wins": 0,
-                "games_played": 0,
-                "scores": [],
-                "best_score": 0,
-                "latest_played_at": "",
-            },
-        )
-        score = int(game.get("player_score") or 0)
-        entry["games_played"] += 1
-        entry["scores"].append(score)
-        entry["best_score"] = max(entry["best_score"], score)
-        if game.get("result") == "win":
-            entry["wins"] += 1
-        played_at = game.get("played_at") or ""
-        if played_at > entry["latest_played_at"]:
-            entry["latest_played_at"] = played_at
-
-    entries = []
-    for entry in stats.values():
-        entry["scores"].sort(reverse=True)
-        entry["score_vector"] = entry["scores"][:]
-        entries.append(entry)
-
-    name_counts = {}
-    for entry in entries:
-        name_counts[entry["player_name"]] = name_counts.get(entry["player_name"], 0) + 1
-    for entry in entries:
-        entry["display_name"] = masked_phone_suffix(entry["player_name"], entry["phone_number"], name_counts)
-
-    def wins_cmp(left, right):
-        if left["wins"] != right["wins"]:
-            return -1 if left["wins"] > right["wins"] else 1
-        if left["best_score"] != right["best_score"]:
-            return -1 if left["best_score"] > right["best_score"] else 1
-        vec_cmp = compare_score_vectors(left["score_vector"], right["score_vector"])
-        if vec_cmp:
-            return vec_cmp
-        if left["games_played"] != right["games_played"]:
-            return -1 if left["games_played"] > right["games_played"] else 1
-        if left["latest_played_at"] != right["latest_played_at"]:
-            return -1 if left["latest_played_at"] > right["latest_played_at"] else 1
-        if left["player_id"] == right["player_id"]:
-            return 0
-        return -1 if left["player_id"] < right["player_id"] else 1
-
-    def score_cmp(left, right):
-        if left["best_score"] != right["best_score"]:
-            return -1 if left["best_score"] > right["best_score"] else 1
-        vec_cmp = compare_score_vectors(left["score_vector"], right["score_vector"])
-        if vec_cmp:
-            return vec_cmp
-        if left["wins"] != right["wins"]:
-            return -1 if left["wins"] > right["wins"] else 1
-        if left["games_played"] != right["games_played"]:
-            return -1 if left["games_played"] > right["games_played"] else 1
-        if left["latest_played_at"] != right["latest_played_at"]:
-            return -1 if left["latest_played_at"] > right["latest_played_at"] else 1
-        if left["player_id"] == right["player_id"]:
-            return 0
-        return -1 if left["player_id"] < right["player_id"] else 1
-
-    wins_ranked = sorted(entries, key=cmp_to_key(wins_cmp))
-    scores_ranked = sorted(entries, key=cmp_to_key(score_cmp))
-
-    def serialize_rows(rows, value_key):
-        data = []
-        for idx, row in enumerate(rows[:10], start=1):
-            data.append(
-                {
-                    "rank": idx,
-                    "player_id": row["player_id"],
-                    "player_name": row["player_name"],
-                    "display_name": row["display_name"],
-                    "wins": row["wins"],
-                    "best_score": row["best_score"],
-                    "games_played": row["games_played"],
-                    "value": row[value_key],
-                }
-            )
-        return data
-
-    player_summary = None
+    target_phone = ""
     if target_player_id is not None:
-        target = normalize_id(target_player_id)
-        wins_pos = next((idx for idx, row in enumerate(wins_ranked, start=1) if row["player_id"] == target), None)
-        score_pos = next((idx for idx, row in enumerate(scores_ranked, start=1) if row["player_id"] == target), None)
-        current = stats.get(target)
-        if current:
-            player_summary = {
-                "player_id": target,
-                "display_name": current["display_name"],
-                "wins_rank": wins_pos,
-                "score_rank": score_pos,
-                "wins": current["wins"],
-                "best_score": current["best_score"],
-                "games_played": current["games_played"],
-            }
+        target_player = players.get(normalize_id(target_player_id))
+        if target_player:
+            target_phone = sanitize_phone_number(target_player.get("phone_number", ""))
 
-    return {
-        "wins": serialize_rows(wins_ranked, "wins"),
-        "scores": serialize_rows(scores_ranked, "best_score"),
-        "player": player_summary,
+    now_kst = datetime.now(KST)
+    cutoffs = {
+        "overall": None,
+        "weekly": now_kst - timedelta(days=7),
+        "daily": now_kst - timedelta(days=1),
     }
-
-
-def masked_phone_suffix(name, phone_number, duplicate_names):
-    digits = sanitize_phone_number(phone_number)
-    if not digits:
-        return f"{name} (미등록)"
-    suffix_len = 5 if duplicate_names.get(name, 0) > 1 else 4
-    suffix = digits[-suffix_len:] if len(digits) >= suffix_len else digits
-    return f"{name} ({suffix})"
-
-
-def build_leaderboards(player_rows, game_rows, target_player_id=None):
-    players = {normalize_id(row["id"]): row for row in player_rows if row.get("id") is not None}
-    stats = {}
+    best_by_period = {period: {} for period in cutoffs}
 
     for game in game_rows:
         pid = normalize_id(game.get("player_id"))
@@ -256,121 +180,77 @@ def build_leaderboards(player_rows, game_rows, target_player_id=None):
         if not phone_number:
             continue
 
-        entry = stats.setdefault(
-            phone_number,
-            {
-                "player_id": pid,
-                "player_name": player.get("player_name") or game.get("player_name") or "Anonymous",
-                "phone_number": phone_number,
-                "wins": 0,
-                "games_played": 0,
-                "scores": [],
-                "best_score": 0,
-                "latest_played_at": "",
-                "identity_key": phone_number,
-            },
-        )
+        played_at = parse_played_at(game.get("played_at"))
+        if not played_at:
+            continue
+        played_at_kst = played_at.astimezone(KST)
 
-        score = int(game.get("player_score") or 0)
-        entry["games_played"] += 1
-        entry["scores"].append(score)
-        entry["best_score"] = max(entry["best_score"], score)
-        if game.get("result") == "win":
-            entry["wins"] += 1
+        candidate = {
+            "player_id": pid,
+            "player_name": player.get("player_name") or game.get("player_name") or "Anonymous",
+            "phone_number": phone_number,
+            "identity_key": phone_number,
+            "player_score": int(game.get("player_score") or 0),
+            "duration_ms": max(0, int(game.get("duration_ms") or 0)),
+            "played_at": played_at.isoformat(),
+            "played_at_label": played_at_kst.strftime("%m/%d %H:%M"),
+        }
 
-        played_at = game.get("played_at") or ""
-        if played_at >= entry["latest_played_at"]:
-            entry["latest_played_at"] = played_at
-            entry["player_id"] = pid
-            entry["player_name"] = player.get("player_name") or game.get("player_name") or entry["player_name"]
+        for period, cutoff in cutoffs.items():
+            if cutoff and played_at_kst < cutoff:
+                continue
+            current = best_by_period[period].get(phone_number)
+            if current is None or compare_rank_entries(candidate, current) < 0:
+                best_by_period[period][phone_number] = dict(candidate)
 
-    entries = []
-    for entry in stats.values():
-        entry["scores"].sort(reverse=True)
-        entry["score_vector"] = entry["scores"][:]
-        entries.append(entry)
+    periods = {}
+    player_summary = {}
 
-    name_counts = {}
-    for entry in entries:
-        name_counts[entry["player_name"]] = name_counts.get(entry["player_name"], 0) + 1
-    for entry in entries:
-        entry["display_name"] = masked_phone_suffix(entry["player_name"], entry["phone_number"], name_counts)
+    for period, entries_by_phone in best_by_period.items():
+        entries = list(entries_by_phone.values())
+        name_counts = {}
+        for entry in entries:
+            name_counts[entry["player_name"]] = name_counts.get(entry["player_name"], 0) + 1
+        for entry in entries:
+            entry["display_name"] = masked_phone_suffix(entry["player_name"], entry["phone_number"], name_counts)
 
-    def wins_cmp(left, right):
-        if left["wins"] != right["wins"]:
-            return -1 if left["wins"] > right["wins"] else 1
-        if left["best_score"] != right["best_score"]:
-            return -1 if left["best_score"] > right["best_score"] else 1
-        vec_cmp = compare_score_vectors(left["score_vector"], right["score_vector"])
-        if vec_cmp:
-            return vec_cmp
-        if left["games_played"] != right["games_played"]:
-            return -1 if left["games_played"] > right["games_played"] else 1
-        if left["latest_played_at"] != right["latest_played_at"]:
-            return -1 if left["latest_played_at"] > right["latest_played_at"] else 1
-        if left["identity_key"] == right["identity_key"]:
-            return 0
-        return -1 if left["identity_key"] < right["identity_key"] else 1
-
-    def score_cmp(left, right):
-        if left["best_score"] != right["best_score"]:
-            return -1 if left["best_score"] > right["best_score"] else 1
-        vec_cmp = compare_score_vectors(left["score_vector"], right["score_vector"])
-        if vec_cmp:
-            return vec_cmp
-        if left["wins"] != right["wins"]:
-            return -1 if left["wins"] > right["wins"] else 1
-        if left["games_played"] != right["games_played"]:
-            return -1 if left["games_played"] > right["games_played"] else 1
-        if left["latest_played_at"] != right["latest_played_at"]:
-            return -1 if left["latest_played_at"] > right["latest_played_at"] else 1
-        if left["identity_key"] == right["identity_key"]:
-            return 0
-        return -1 if left["identity_key"] < right["identity_key"] else 1
-
-    wins_ranked = sorted(entries, key=cmp_to_key(wins_cmp))
-    scores_ranked = sorted(entries, key=cmp_to_key(score_cmp))
-
-    def serialize_rows(rows, value_key):
-        data = []
-        for idx, row in enumerate(rows[:10], start=1):
-            data.append(
+        ranked = sorted(entries, key=cmp_to_key(compare_rank_entries))
+        rows = []
+        for rank, entry in enumerate(ranked[:20], start=1):
+            rows.append(
                 {
-                    "rank": idx,
-                    "player_id": row["player_id"],
-                    "player_name": row["player_name"],
-                    "display_name": row["display_name"],
-                    "wins": row["wins"],
-                    "best_score": row["best_score"],
-                    "games_played": row["games_played"],
-                    "value": row[value_key],
+                    "rank": rank,
+                    "player_id": entry["player_id"],
+                    "display_name": entry["display_name"],
+                    "score": entry["player_score"],
+                    "duration_ms": entry["duration_ms"],
+                    "duration_label": format_duration_label(entry["duration_ms"]),
+                    "played_at_label": entry["played_at_label"],
                 }
             )
-        return data
 
-    player_summary = None
-    if target_player_id is not None:
-        target = normalize_id(target_player_id)
-        target_player = players.get(target)
-        target_phone = sanitize_phone_number(target_player.get("phone_number", "")) if target_player else ""
-        wins_pos = next((idx for idx, row in enumerate(wins_ranked, start=1) if row["identity_key"] == target_phone), None)
-        score_pos = next((idx for idx, row in enumerate(scores_ranked, start=1) if row["identity_key"] == target_phone), None)
-        current = stats.get(target_phone)
-        if current:
-            player_summary = {
-                "player_id": current["player_id"],
-                "display_name": current["display_name"],
-                "wins_rank": wins_pos,
-                "score_rank": score_pos,
-                "wins": current["wins"],
-                "best_score": current["best_score"],
-                "games_played": current["games_played"],
-            }
+        periods[period] = {
+            "label": PERIOD_LABELS[period],
+            "rows": rows,
+        }
+
+        if target_phone:
+            rank = next((idx for idx, entry in enumerate(ranked, start=1) if entry["identity_key"] == target_phone), None)
+            current = entries_by_phone.get(target_phone)
+            player_summary[period] = (
+                {
+                    "rank": rank,
+                    "score": current["player_score"],
+                    "duration_ms": current["duration_ms"],
+                    "duration_label": format_duration_label(current["duration_ms"]),
+                }
+                if current
+                else None
+            )
 
     return {
-        "wins": serialize_rows(wins_ranked, "wins"),
-        "scores": serialize_rows(scores_ranked, "best_score"),
-        "player": player_summary,
+        "periods": periods,
+        "player": player_summary if target_phone else None,
     }
 
 
@@ -634,13 +514,14 @@ def save_game():
             "ai_board": d["ai_board"],
             "player_score": d["player_score"],
             "ai_score": d["ai_score"],
+            "duration_ms": max(0, int(d.get("duration_ms") or 0)),
             "result": d["result"],
             "turn_sequence": [t.get("card") for t in d.get("turns", [])],
         }
         try:
             game_resp = sb().table("games").insert(game_payload).execute()
         except Exception:
-            legacy_game_payload = {k: v for k, v in game_payload.items() if k != "turn_sequence"}
+            legacy_game_payload = {k: v for k, v in game_payload.items() if k not in ("turn_sequence", "duration_ms")}
             game_resp = sb().table("games").insert(legacy_game_payload).execute()
         game_rows = resp_data(game_resp)
         if not game_rows:
@@ -782,6 +663,7 @@ def download_csv():
                 "Playtime",
                 "Genres",
                 "Played At",
+                "Duration (ms)",
                 "Deck",
                 "Turn Sequence",
                 "Player Board",
@@ -804,6 +686,7 @@ def download_csv():
                     p.get("playtime", ""),
                     json.dumps(p.get("genres", [])),
                     g.get("played_at"),
+                    g.get("duration_ms", 0),
                     json.dumps(g.get("deck", [])),
                     json.dumps(g.get("turn_sequence", [])),
                     json.dumps(g.get("player_board", [])),
@@ -890,7 +773,7 @@ def leaderboard():
     try:
         target_player_id = request.args.get("player_id")
         player_rows = fetch_all_rows("players", columns="id,player_name,phone_number")
-        game_rows = fetch_all_rows("games", columns="player_id,player_name,player_score,result,played_at")
+        game_rows = fetch_all_rows("games", columns="player_id,player_name,player_score,duration_ms,played_at")
         return jsonify(build_leaderboards(player_rows, game_rows, target_player_id=target_player_id))
     except Exception as exc:
         return jsonify({"status": "error", "message": str(exc)}), 500

@@ -134,6 +134,7 @@
               <th>Phone</th>
               <th>MBTI</th>
               <th>Played At</th>
+              <th>Duration</th>
               <th>Board</th>
               <th>Score</th>
               <th>Result</th>
@@ -141,7 +142,7 @@
             </tr>
           </thead>
           <tbody id="table-body">
-            <tr><td colspan="9" class="empty">불러오는 중...</td></tr>
+            <tr><td colspan="10" class="empty">불러오는 중...</td></tr>
           </tbody>
         </table>
       </div>
@@ -203,6 +204,13 @@ function formatPhone(phone){
   return digits;
 }
 
+function formatDuration(durationMs){
+  const totalSeconds = Math.max(0, Math.floor(Number(durationMs || 0) / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
+
 async function fetchHealth(){
   try{
     const r = await fetch('/api/health');
@@ -250,6 +258,7 @@ function renderTable(page){
         g.age,
         g.gender,
         g.playtime,
+        formatDuration(g.duration_ms),
         g.survey_genres,
         g.result
       ].join(' ').toLowerCase();
@@ -262,7 +271,7 @@ function renderTable(page){
 
   const tb = document.getElementById('table-body');
   if(!rows.length){
-    tb.innerHTML = '<tr><td colspan="9" class="empty">표시할 기록이 없습니다.</td></tr>';
+    tb.innerHTML = '<tr><td colspan="10" class="empty">표시할 기록이 없습니다.</td></tr>';
   }else{
     tb.innerHTML = rows.map(g => `
       <tr>
@@ -271,6 +280,7 @@ function renderTable(page){
         <td class="mono">${formatPhone(g.phone_number)}</td>
         <td>${mbtiBadge(g.mbti)}</td>
         <td class="mono muted">${fmtTime(g.played_at)}</td>
+        <td class="mono">${formatDuration(g.duration_ms)}</td>
         <td>${renderBoard(g.player_board)}</td>
         <td><span style="color:var(--blue)">${g.player_score}</span> : <span style="color:var(--purple)">${g.ai_score}</span></td>
         <td>${resultBadge(g.result)}</td>
@@ -297,7 +307,7 @@ async function loadRecords(page){
     renderStats(d);
     renderTable(page);
   }catch(e){
-    document.getElementById('table-body').innerHTML = '<tr><td colspan="9" class="empty">기록을 불러오지 못했습니다.</td></tr>';
+    document.getElementById('table-body').innerHTML = '<tr><td colspan="10" class="empty">기록을 불러오지 못했습니다.</td></tr>';
   }
 }
 
@@ -339,6 +349,7 @@ async function showDetail(gid){
           ${game.gender ? `<span class="chip">Gender <b>${game.gender}</b></span>` : ''}
           ${game.mbti ? `<span class="chip">MBTI <b>${game.mbti}</b></span>` : ''}
           ${game.playtime ? `<span class="chip">Playtime <b>${game.playtime}</b></span>` : ''}
+          <span class="chip">Duration <b>${formatDuration(game.duration_ms)}</b></span>
         </div>
         ${turnSequence.length ? `<div style="margin-bottom:14px"><div class="muted" style="margin-bottom:6px">Card Sequence</div>${turnSequence.map((v,i)=>`<span class="badge mbti" style="margin-right:6px">${i+1}:${v}</span>`).join(' ')}</div>` : ''}
         ${game.survey_genres ? `<div style="margin-bottom:14px" class="muted">Genres: ${(() => {
