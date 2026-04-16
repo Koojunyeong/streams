@@ -24,8 +24,6 @@
   .rules-box h3{color:var(--blue);font-size:15px;margin-bottom:10px}
   .rules-box ul{color:#aaa;line-height:1.9;font-size:13px;padding-left:20px}
   .rules-box b{color:var(--text)} .gold{color:var(--gold)}
-  .guide-row{display:flex;gap:16px;font-size:12px;color:#aaa;margin-top:12px;padding-top:10px;border-top:1px solid var(--border)}
-  .guide-dot{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:middle}
 
   /* ─── SURVEY ─── */
   #survey{display:none;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:20px}
@@ -76,7 +74,8 @@
 
   .record{margin-top:12px;color:var(--dim);font-size:13px}
   .menu-actions{display:flex;gap:12px;align-items:center;justify-content:center;margin-top:22px;flex-wrap:wrap}
-  .menu-actions .btn-start,.menu-actions .btn-secondary{margin-top:0;padding:14px 48px}
+  .menu-actions .btn-start,
+  .menu-actions .btn-secondary{margin-top:0;width:240px;min-height:62px;display:inline-flex;align-items:center;justify-content:center;padding:0 24px}
   .leaderboard-card{background:rgba(13,17,23,.72);border:1px solid var(--border);border-radius:16px;padding:14px}
   .leaderboard-list{display:flex;flex-direction:column;gap:10px}
   .leaderboard-item{display:grid;grid-template-columns:52px minmax(0,1fr);gap:12px;align-items:center;padding:12px 14px;border-radius:12px;background:rgba(255,255,255,.03)}
@@ -145,9 +144,6 @@
     flex-direction:column;transition:all .2s;position:relative}
   .slot-empty{background:linear-gradient(135deg,#1a1a2e,#16213e);border:2px dashed #333;cursor:default}
   .slot-empty.clickable{cursor:pointer}.slot-empty.clickable:hover{transform:scale(1.08)}
-  .slot-empty.hl-safe{}
-  .slot-empty.hl-valid{}
-  .slot-empty.hl-danger{}
   .slot-index{color:var(--faint);font-size:11px;font-family:var(--mono)}
   .slot-filled{border:none}
   .ai-marker{position:absolute;top:-4px;right:-4px;width:8px;height:8px;border-radius:50%;
