@@ -137,7 +137,10 @@ def leaderboard_display_name(name, duplicate_names, duplicate_index, identity):
         return masked_phone_suffix(name, identity["phone_number"], duplicate_names)
 
     if duplicate_names.get(name, 0) > 1:
-        return f"{name} (참가자 {duplicate_index})"
+        prefix, dash, suffix = name.rpartition("-")
+        if dash and suffix.isdigit():
+            return f"{prefix}-{duplicate_index}"
+        return f"{name}-{duplicate_index}"
     return name
 
 
