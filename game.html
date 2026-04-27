@@ -139,6 +139,8 @@
   .tutorial-tip{padding:12px 14px;border-radius:12px;background:rgba(126,200,240,.06);border:1px solid rgba(126,200,240,.14);font-size:13px;line-height:1.7;color:#c8d2e2}
   .tutorial-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:20px;flex-wrap:wrap}
   .tutorial-nav{display:flex;gap:10px;flex-wrap:wrap}
+  .tutorial-nav .btn-start,
+  .tutorial-nav .btn-secondary{margin-top:0;width:240px;min-height:62px;display:inline-flex;align-items:center;justify-content:center;padding:0 24px}
   .tutorial-counter{font-size:12px;color:var(--dim)}
   .tutorial-practice-head{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin:12px 0 16px}
   .tutorial-current-card{display:flex;align-items:center;gap:12px;padding:12px 16px;border-radius:14px;background:rgba(255,255,255,.03);border:1px solid var(--border)}
@@ -437,28 +439,29 @@ const TUTORIAL_STEPS=[
     board:[
       {value:4,type:'low'},
       {value:9,type:'low'},
+      {value:9,type:'low'},
       {value:13,type:'mid'},
       {value:17,type:'mid'},
       {value:24,type:'high'}
     ],
-    caption:'4 → 9 → 13 → 17 → 24처럼 커지는 흐름이 길수록 점수가 크게 올라갑니다.',
+    caption:'4 → 9 → 9 → 13 → 17처럼 같은 숫자가 이어져도 오름차순으로 계산됩니다. 이런 흐름이 길수록 점수가 크게 올라갑니다.',
     tips:[
       '플레이어와 AI는 매 턴 같은 숫자를 동시에 받습니다.',
-      '최종 점수는 연속된 오름차순 구간 길이의 합으로 계산됩니다.'
+      '최종 점수는 연속된 오름차순 구간 길이의 합으로 계산됩니다.',
+      '즉, 같은 숫자가 연속으로 나와도 끊기지 않고 같은 오름차순 줄로 인정됩니다.'
     ],
     practice:{
-      prompt:'현재 카드 13을 눌러서, 9와 17 사이의 가장 자연스러운 칸에 배치해보세요.',
-      currentCard:13,
+      prompt:'현재 카드 9를 눌러서, 4 다음과 13 이전 사이에 배치해보세요. 같은 숫자가 이어져도 오름차순으로 계산됩니다.',
+      currentCard:9,
       board:[
         {value:4,type:'low'},
-        {value:9,type:'low'},
-        {empty:true,index:3,target:true},
+        {empty:true,index:2,target:true},
         {value:17,type:'mid'},
         {value:24,type:'high'}
       ],
-      correctSlot:2,
-      success:'좋습니다. 작은 수 오른쪽, 큰 수 왼쪽에 끼워 넣으면 긴 오름차순 줄을 만들기 쉬워집니다.',
-      error:'이 칸은 9 → 13 → 17 흐름을 만들기 어렵습니다. 13이 어디에 들어가야 가장 자연스러운지 다시 봐주세요.'
+      correctSlot:1,
+      success:'좋습니다. 4 → 9 → 17 흐름 사이에 같은 숫자 9를 끼워 넣어도 오름차순 줄이 유지됩니다.',
+      error:'여기 두면 같은 숫자를 이용한 오름차순 줄이 이어지지 않습니다. 4 다음과 17 이전 사이를 다시 봐주세요.'
     }
   },
   {
