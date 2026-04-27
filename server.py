@@ -132,13 +132,13 @@ def leaderboard_identity(player_row):
     }
 
 
-def leaderboard_display_name(name, duplicate_names, identity):
+def leaderboard_display_name(name, duplicate_names, duplicate_index, identity):
     if identity["identity_kind"] == "phone":
         return masked_phone_suffix(name, identity["phone_number"], duplicate_names)
 
-    suffix_len = 5 if duplicate_names.get(name, 0) > 1 else 4
-    suffix = identity["identity_suffix"][-suffix_len:]
-    return f"{name} ({suffix})"
+    if duplicate_names.get(name, 0) > 1:
+        return f"{name} (참가자 {duplicate_index})"
+    return name
 
 
 def parse_played_at(value):
@@ -249,10 +249,13 @@ def build_leaderboards(player_rows, game_rows, target_player_id=None):
         name_counts = {}
         for entry in entries:
             name_counts[entry["player_name"]] = name_counts.get(entry["player_name"], 0) + 1
-        for entry in entries:
-            entry["display_name"] = leaderboard_display_name(entry["player_name"], name_counts, entry)
 
         ranked = sorted(entries, key=cmp_to_key(compare_rank_entries))
+        name_seen = {}
+        for entry in ranked:
+            name = entry["player_name"]
+            name_seen[name] = name_seen.get(name, 0) + 1
+            entry["display_name"] = leaderboard_display_name(name, name_counts, name_seen[name], entry)
         rows = []
         for rank, entry in enumerate(ranked[:100], start=1):
             rows.append(
