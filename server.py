@@ -72,7 +72,7 @@ else:
 print(f"[Server Device] {DEVICE}")
 
 KST = ZoneInfo("Asia/Seoul")
-PERIOD_LABELS = {"overall": "Overall", "weekly": "7 Days", "daily": "24 Hours"}
+PERIOD_LABELS = {"daily": "24 Hours", "weekly": "7 Days", "overall": "Overall"}
 
 
 def sb():
@@ -167,9 +167,9 @@ def build_leaderboards(player_rows, game_rows, target_player_id=None):
 
     now_kst = datetime.now(KST)
     cutoffs = {
-        "overall": None,
-        "weekly": now_kst - timedelta(days=7),
         "daily": now_kst - timedelta(days=1),
+        "weekly": now_kst - timedelta(days=7),
+        "overall": None,
     }
     best_by_period = {period: {} for period in cutoffs}
 

@@ -364,12 +364,12 @@
 
 <script>
 const ST={1:0,2:1,3:3,4:5,5:7,6:9,7:11,8:15,9:20,10:25,11:30,12:35,13:40,14:50,15:60,16:70,17:85,18:100,19:150,20:300};
-const PERIOD_LABELS={overall:'전체',weekly:'일주일',daily:'일일'};
+const PERIOD_LABELS={daily:'일일',weekly:'일주일',overall:'전체'};
 let deck=[],ci=0,pBoard=Array(20).fill(0),aBoard=Array(20).fill(0),
     turnPhase='player',gameActive=false,lastAi=-1,lastQ=null,showQ=false,
     playerName='Anonymous',playerId=null,history={w:0,l:0,d:0},turnLog=[],gameStartedAt=0;
 const SURVEY_DRAFT_KEY='streams-survey-draft';
-const leaderboardState={data:null,period:'overall',targetPlayerId:null,expanded:false};
+const leaderboardState={data:null,period:'daily',targetPlayerId:null,expanded:false};
 
 function surveyDraft(){
   return {
@@ -518,7 +518,7 @@ function renderLeaderboardModal(){const modalBody=document.getElementById('leade
 function setLeaderboardPeriod(period){leaderboardState.period=period;leaderboardState.expanded=false;renderLeaderboardModal();}
 function toggleLeaderboardExpanded(){leaderboardState.expanded=!leaderboardState.expanded;renderLeaderboardModal();}
 async function fetchLeaderboard(targetPlayerId){try{const query=targetPlayerId?`?player_id=${encodeURIComponent(targetPlayerId)}`:'';const res=await fetch(`/api/leaderboard${query}`);if(!res.ok)throw new Error('leaderboard fetch failed');return await res.json();}catch(e){return null;}}
-async function openLeaderboardModal(targetPlayerId=null,period='overall'){leaderboardState.period=period;leaderboardState.targetPlayerId=targetPlayerId;leaderboardState.expanded=false;document.getElementById('leaderboard-modal').style.display='flex';document.getElementById('leaderboard-modal-body').innerHTML='<div class="leaderboard-empty">리더보드를 불러오는 중입니다.</div>';leaderboardState.data=await fetchLeaderboard(targetPlayerId);renderLeaderboardModal();}
+async function openLeaderboardModal(targetPlayerId=null,period='daily'){leaderboardState.period=period;leaderboardState.targetPlayerId=targetPlayerId;leaderboardState.expanded=false;document.getElementById('leaderboard-modal').style.display='flex';document.getElementById('leaderboard-modal-body').innerHTML='<div class="leaderboard-empty">리더보드를 불러오는 중입니다.</div>';leaderboardState.data=await fetchLeaderboard(targetPlayerId);renderLeaderboardModal();}
 function closeLeaderboardModal(){document.getElementById('leaderboard-modal').style.display='none';}
 function startGame(){closeLeaderboardModal();document.getElementById('survey').style.display='none';deck=shuffle(buildPool()).slice(0,20);ci=0;pBoard=Array(20).fill(0);aBoard=Array(20).fill(0);turnPhase='player';gameActive=true;lastAi=-1;lastQ=null;turnLog=[];gameStartedAt=Date.now();document.getElementById('menu').style.display='none';document.getElementById('game').style.display='flex';document.getElementById('result-area').style.display='none';document.getElementById('result-area').innerHTML='';document.getElementById('card-area').style.display='flex';document.getElementById('round-display').textContent='1/20';document.getElementById('turn-msg').className='player-prompt';document.getElementById('turn-msg').textContent='카드를 배치하세요';document.getElementById('ai-note').textContent='';renderCard();renderPB();renderAB();updateScores();renderST();}
 async function place(index){if(!gameActive||turnPhase!=='player'||pBoard[index])return;const num=deck[ci];pBoard[index]=num;turnPhase='ai';renderPB();updateScores();const turnMsg=document.getElementById('turn-msg');turnMsg.className='ai-thinking';turnMsg.textContent='AI 계산 중...';const res=await requestAi();await new Promise(resolve=>setTimeout(resolve,400));const aiAction=res.action;aBoard[aiAction]=num;lastAi=aiAction;lastQ=res.q_values||null;document.getElementById('ai-note').textContent=`AI는 ${aiAction+1}번 칸에 배치`;renderAB();const {ps,as_}=updateScores();turnLog.push({turn:ci+1,card:num,card_order:ci+1,deck_index:ci,player_slot:index,ai_slot:aiAction,player_score_after:ps,ai_score_after:as_});ci++;if(ci>=20){endGame();return;}document.getElementById('round-display').textContent=`${ci+1}/20`;turnPhase='player';turnMsg.className='player-prompt';turnMsg.textContent='카드를 배치하세요';renderCard();renderPB();}
