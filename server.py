@@ -111,6 +111,36 @@ def masked_phone_suffix(name, phone_number, duplicate_names):
     return f"{name} ({suffix})"
 
 
+def leaderboard_identity(player_row):
+    pid = normalize_id(player_row.get("id"))
+    phone_number = sanitize_phone_number(player_row.get("phone_number", ""))
+    if phone_number:
+        return {
+            "identity_key": f"phone:{phone_number}",
+            "phone_number": phone_number,
+            "identity_suffix": phone_number,
+            "identity_kind": "phone",
+        }
+    if pid is None:
+        return None
+    player_suffix = str(pid).zfill(4)[-4:]
+    return {
+        "identity_key": f"player:{pid}",
+        "phone_number": "",
+        "identity_suffix": player_suffix,
+        "identity_kind": "player",
+    }
+
+
+def leaderboard_display_name(name, duplicate_names, identity):
+    if identity["identity_kind"] == "phone":
+        return masked_phone_suffix(name, identity["phone_number"], duplicate_names)
+
+    suffix_len = 5 if duplicate_names.get(name, 0) > 1 else 4
+    suffix = identity["identity_suffix"][-suffix_len:]
+    return f"{name} ({suffix})"
+
+
 def parse_played_at(value):
     if not value:
         return None
@@ -160,11 +190,13 @@ def compare_rank_entries(left, right):
 
 def build_leaderboards(player_rows, game_rows, target_player_id=None):
     players = {normalize_id(row["id"]): row for row in player_rows if row.get("id") is not None}
-    target_phone = ""
+    target_identity_key = ""
     if target_player_id is not None:
         target_player = players.get(normalize_id(target_player_id))
         if target_player:
-            target_phone = sanitize_phone_number(target_player.get("phone_number", ""))
+            target_identity = leaderboard_identity(target_player)
+            if target_identity:
+                target_identity_key = target_identity["identity_key"]
 
     now_kst = datetime.now(KST)
     cutoffs = {
@@ -180,8 +212,8 @@ def build_leaderboards(player_rows, game_rows, target_player_id=None):
         if not player:
             continue
 
-        phone_number = sanitize_phone_number(player.get("phone_number", ""))
-        if not phone_number:
+        identity = leaderboard_identity(player)
+        if not identity:
             continue
 
         played_at = parse_played_at(game.get("played_at"))
@@ -192,8 +224,10 @@ def build_leaderboards(player_rows, game_rows, target_player_id=None):
         candidate = {
             "player_id": pid,
             "player_name": player.get("player_name") or game.get("player_name") or "Anonymous",
-            "phone_number": phone_number,
-            "identity_key": phone_number,
+            "phone_number": identity["phone_number"],
+            "identity_key": identity["identity_key"],
+            "identity_suffix": identity["identity_suffix"],
+            "identity_kind": identity["identity_kind"],
             "player_score": int(game.get("player_score") or 0),
             "duration_ms": max(0, int(game.get("duration_ms") or 0)),
             "played_at": played_at.isoformat(),
@@ -203,20 +237,20 @@ def build_leaderboards(player_rows, game_rows, target_player_id=None):
         for period, cutoff in cutoffs.items():
             if cutoff and played_at_kst < cutoff:
                 continue
-            current = best_by_period[period].get(phone_number)
+            current = best_by_period[period].get(identity["identity_key"])
             if current is None or compare_rank_entries(candidate, current) < 0:
-                best_by_period[period][phone_number] = dict(candidate)
+                best_by_period[period][identity["identity_key"]] = dict(candidate)
 
     periods = {}
     player_summary = {}
 
-    for period, entries_by_phone in best_by_period.items():
-        entries = list(entries_by_phone.values())
+    for period, entries_by_identity in best_by_period.items():
+        entries = list(entries_by_identity.values())
         name_counts = {}
         for entry in entries:
             name_counts[entry["player_name"]] = name_counts.get(entry["player_name"], 0) + 1
         for entry in entries:
-            entry["display_name"] = masked_phone_suffix(entry["player_name"], entry["phone_number"], name_counts)
+            entry["display_name"] = leaderboard_display_name(entry["player_name"], name_counts, entry)
 
         ranked = sorted(entries, key=cmp_to_key(compare_rank_entries))
         rows = []
@@ -238,9 +272,9 @@ def build_leaderboards(player_rows, game_rows, target_player_id=None):
             "rows": rows,
         }
 
-        if target_phone:
-            rank = next((idx for idx, entry in enumerate(ranked, start=1) if entry["identity_key"] == target_phone), None)
-            current = entries_by_phone.get(target_phone)
+        if target_identity_key:
+            rank = next((idx for idx, entry in enumerate(ranked, start=1) if entry["identity_key"] == target_identity_key), None)
+            current = entries_by_identity.get(target_identity_key)
             player_summary[period] = (
                 {
                     "rank": rank,
@@ -254,7 +288,7 @@ def build_leaderboards(player_rows, game_rows, target_player_id=None):
 
     return {
         "periods": periods,
-        "player": player_summary if target_phone else None,
+        "player": player_summary if target_identity_key else None,
     }
 
 
