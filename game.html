@@ -527,6 +527,37 @@ const TUTORIAL_STEPS=[
     }
   },
   {
+    title:'같은 숫자여도 흐름은 이어집니다',
+    desc:'스트림스에서는 같은 숫자가 연속으로 나와도 오름차순 줄이 끊기지 않습니다. 즉, 9 다음에 또 9가 와도 감소한 것이 아니기 때문에 같은 흐름으로 계산됩니다.',
+    exampleLabel:'같은 숫자 예시',
+    board:[
+      {value:4,type:'low'},
+      {value:9,type:'low'},
+      {value:9,type:'low'},
+      {value:13,type:'mid'},
+      {value:18,type:'mid'}
+    ],
+    caption:'4 → 9 → 9 → 13 → 18처럼 같은 숫자가 이어져도 하나의 오름차순 구간으로 계산됩니다.',
+    tips:[
+      '같은 숫자가 나온다고 해서 억지로 멀리 떼어 놓을 필요는 없습니다.',
+      '앞뒤 흐름이 유지된다면 같은 숫자를 붙여 두는 것도 좋은 선택입니다.'
+    ],
+    practice:{
+      prompt:'현재 카드 9를 눌러서, 이미 놓인 9 옆에 자연스럽게 이어지도록 배치해보세요.',
+      currentCard:9,
+      board:[
+        {value:4,type:'low'},
+        {value:9,type:'low'},
+        {empty:true,index:3,target:true},
+        {value:13,type:'mid'},
+        {value:18,type:'mid'}
+      ],
+      correctSlot:2,
+      success:'맞았습니다. 같은 숫자 9를 이어 붙여도 오름차순 구간이 유지됩니다.',
+      error:'이 단계의 핵심은 같은 숫자도 흐름을 끊지 않는다는 점입니다. 기존 9 다음 칸을 다시 봐주세요.'
+    }
+  },
+  {
     title:'점수는 긴 구간 하나가 매우 강합니다',
     desc:'마지막에는 전체를 완벽히 정렬하지 못해도 괜찮습니다. 대신 긴 오름차순 줄을 하나라도 길게 만드는 것이 높은 점수로 이어집니다.',
     exampleLabel:'구간 점수 감각',
