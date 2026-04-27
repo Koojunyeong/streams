@@ -60,6 +60,7 @@ else:
     print("[Supabase] missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY")
 
 app = Flask(__name__)
+app.json.sort_keys = False
 
 if TORCH_AVAILABLE and torch.cuda.is_available():
     torch.backends.cudnn.benchmark = True
