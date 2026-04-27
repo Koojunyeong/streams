@@ -456,12 +456,13 @@ const TUTORIAL_STEPS=[
       board:[
         {value:4,type:'low'},
         {empty:true,index:2,target:true},
+        {value:13,type:'mid'},
         {value:17,type:'mid'},
         {value:24,type:'high'}
       ],
       correctSlot:1,
-      success:'좋습니다. 4 → 9 → 17 흐름 사이에 같은 숫자 9를 끼워 넣어도 오름차순 줄이 유지됩니다.',
-      error:'여기 두면 같은 숫자를 이용한 오름차순 줄이 이어지지 않습니다. 4 다음과 17 이전 사이를 다시 봐주세요.'
+      success:'좋습니다. 4 다음과 13 이전에 9를 넣으면 4 → 9 → 13 흐름이 자연스럽게 이어집니다.',
+      error:'지금은 4 다음과 13 이전이라는 기준을 맞춰야 합니다. 9가 어디에 들어가야 가장 자연스러운지 다시 봐주세요.'
     }
   },
   {
@@ -566,9 +567,11 @@ const TUTORIAL_STEPS=[
       {value:7,type:'low'},
       {value:12,type:'mid'},
       {value:19,type:'mid'},
-      {value:15,type:'mid',bad:true}
+      {value:15,type:'mid',bad:true},
+      {value:23,type:'high'},
+      {value:28,type:'high'}
     ],
-    caption:'2 → 7 → 12 → 19까지는 긴 구간이지만, 마지막 15가 들어오면 흐름이 끊깁니다. 후반에는 한 칸 실수가 점수 차이를 크게 만듭니다.',
+    caption:'2 → 7 → 12 → 19 → 23 → 28로 길게 이어지던 스트림이, 15가 19 뒤에 들어오는 순간 두 조각으로 끊깁니다. 후반에는 이런 한 번의 단절이 점수 차이를 크게 만듭니다.',
     tips:[
       '동점이면 더 짧은 플레이 시간이 우선입니다.',
       '튜토리얼을 끝냈다면 바로 게임 시작으로 넘어가서 감각을 확인해보세요.'
@@ -581,11 +584,13 @@ const TUTORIAL_STEPS=[
         {value:7,type:'low'},
         {value:12,type:'mid'},
         {empty:true,index:4,target:true},
-        {value:19,type:'mid'}
+        {value:19,type:'mid'},
+        {value:23,type:'high'},
+        {value:28,type:'high'}
       ],
       correctSlot:3,
-      success:'완벽합니다. 후반에는 이렇게 긴 구간 하나를 지키는 선택이 점수 차이를 크게 만듭니다.',
-      error:'이 카드는 19 뒤에 가면 흐름이 끊깁니다. 12 다음, 19 이전에 들어가야 긴 구간이 유지됩니다.'
+      success:'완벽합니다. 15를 12와 19 사이에 넣으면 뒤의 23, 28까지 긴 스트림이 그대로 살아남습니다.',
+      error:'15가 19 뒤로 밀리면 2 → 7 → 12 → 19와 15 → 23 → 28로 스트림이 끊깁니다. 긴 흐름을 지키려면 12 다음, 19 이전에 넣어야 합니다.'
     }
   }
 ];
