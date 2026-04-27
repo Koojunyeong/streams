@@ -125,7 +125,7 @@
   .tutorial-example-label{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--dim);margin-bottom:12px}
   .tutorial-board{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
   .tutorial-slot{width:60px;height:74px;border-radius:12px;border:1px solid var(--border);background:linear-gradient(135deg,#121827,#0d1117);
-    display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;padding:6px}
+    display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;padding:6px;appearance:none;outline:none;font:inherit}
   .tutorial-slot-number{font-family:var(--mono);font-size:22px;font-weight:800}
   .tutorial-slot-index{font-size:10px;color:var(--faint);margin-top:4px}
   .tutorial-slot.card-low{color:var(--blue);border-color:#2e6ba6}
@@ -140,6 +140,15 @@
   .tutorial-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:20px;flex-wrap:wrap}
   .tutorial-nav{display:flex;gap:10px;flex-wrap:wrap}
   .tutorial-counter{font-size:12px;color:var(--dim)}
+  .tutorial-practice-head{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin:12px 0 16px}
+  .tutorial-current-card{display:flex;align-items:center;gap:12px;padding:12px 16px;border-radius:14px;background:rgba(255,255,255,.03);border:1px solid var(--border)}
+  .tutorial-current-card .label{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--dim)}
+  .tutorial-feedback{margin-top:14px;padding:12px 14px;border-radius:12px;font-size:13px;line-height:1.6;border:1px solid var(--border);background:rgba(255,255,255,.03);color:#d3dbeb}
+  .tutorial-feedback.success{border-color:rgba(46,166,104,.4);background:rgba(46,166,104,.12);color:#d8f7e5}
+  .tutorial-feedback.error{border-color:rgba(166,46,46,.4);background:rgba(166,46,46,.12);color:#ffd0d0}
+  .tutorial-slot.clickable{cursor:pointer;transition:transform .2s,border-color .2s,box-shadow .2s}
+  .tutorial-slot.clickable:hover{transform:translateY(-2px);border-color:var(--blue);box-shadow:0 8px 20px rgba(126,200,240,.14)}
+  .tutorial-slot.filled-preview{box-shadow:0 0 0 2px rgba(46,166,104,.5) inset}
 
   /* ─── GAME ─── */
   #game{display:none;flex-direction:column;align-items:center;width:100%;max-width:1120px;padding:16px 12px}
@@ -436,7 +445,21 @@ const TUTORIAL_STEPS=[
     tips:[
       '플레이어와 AI는 매 턴 같은 숫자를 동시에 받습니다.',
       '최종 점수는 연속된 오름차순 구간 길이의 합으로 계산됩니다.'
-    ]
+    ],
+    practice:{
+      prompt:'현재 카드 13을 눌러서, 9와 17 사이의 가장 자연스러운 칸에 배치해보세요.',
+      currentCard:13,
+      board:[
+        {value:4,type:'low'},
+        {value:9,type:'low'},
+        {empty:true,index:3,target:true},
+        {value:17,type:'mid'},
+        {value:24,type:'high'}
+      ],
+      correctSlot:2,
+      success:'좋습니다. 작은 수 오른쪽, 큰 수 왼쪽에 끼워 넣으면 긴 오름차순 줄을 만들기 쉬워집니다.',
+      error:'이 칸은 9 → 13 → 17 흐름을 만들기 어렵습니다. 13이 어디에 들어가야 가장 자연스러운지 다시 봐주세요.'
+    }
   },
   {
     title:'현재 숫자가 들어갈 자리를 좁혀보기',
@@ -453,7 +476,21 @@ const TUTORIAL_STEPS=[
     tips:[
       '왼쪽 기준값보다 커야 하고, 오른쪽 기준값보다 작아야 안전합니다.',
       '이미 정렬이 깨진 구간을 억지로 살리기보다 다음 숫자가 이어질 자리도 함께 보세요.'
-    ]
+    ],
+    practice:{
+      prompt:'현재 카드 14를 두 칸 중 하나에 배치해보세요. 6보다 크고 18보다 작은 흐름을 만드는 칸이 정답입니다.',
+      currentCard:14,
+      board:[
+        {value:6,type:'low'},
+        {empty:true,index:2},
+        {empty:true,index:3,target:true},
+        {value:18,type:'mid'},
+        {value:25,type:'high'}
+      ],
+      correctSlot:2,
+      success:'맞았습니다. 지금처럼 범위를 좁혀보면 후보 칸이 빠르게 줄어듭니다.',
+      error:'이 칸은 14의 양옆 기준을 만족하지 않거나 다음 숫자가 이어지기 어렵습니다. 6과 18 사이를 다시 확인해보세요.'
+    }
   },
   {
     title:'초반에는 빈칸을 남겨야 후반이 편해집니다',
@@ -470,7 +507,21 @@ const TUTORIAL_STEPS=[
     tips:[
       '초반에 너무 촘촘하게 두면 중간 숫자가 들어올 자리가 사라집니다.',
       '특히 10~20 구간 숫자는 자주 나오므로 공간을 남기는 가치가 큽니다.'
-    ]
+    ],
+    practice:{
+      prompt:'현재 카드 20을 배치해보세요. 11과 26 사이의 넓은 공간을 살리는 쪽이 후반 운영에 유리합니다.',
+      currentCard:20,
+      board:[
+        {value:3,type:'low'},
+        {empty:true,index:2},
+        {value:11,type:'mid'},
+        {empty:true,index:4,target:true},
+        {value:26,type:'high'}
+      ],
+      correctSlot:3,
+      success:'좋아요. 20을 오른쪽 빈칸에 두면 11과 26 사이에 더 자연스러운 흐름을 만들 수 있습니다.',
+      error:'이 칸에 두면 이후 12~18대 숫자가 들어올 공간이 빠르게 줄어듭니다. 후반 숫자가 들어올 자리를 남겨보세요.'
+    }
   },
   {
     title:'점수는 긴 구간 하나가 매우 강합니다',
@@ -487,7 +538,21 @@ const TUTORIAL_STEPS=[
     tips:[
       '동점이면 더 짧은 플레이 시간이 우선입니다.',
       '튜토리얼을 끝냈다면 바로 게임 시작으로 넘어가서 감각을 확인해보세요.'
-    ]
+    ],
+    practice:{
+      prompt:'마지막 연습입니다. 현재 카드 15를 배치해서 2 → 7 → 12 → 15 → 19 흐름을 완성해보세요.',
+      currentCard:15,
+      board:[
+        {value:2,type:'low'},
+        {value:7,type:'low'},
+        {value:12,type:'mid'},
+        {empty:true,index:4,target:true},
+        {value:19,type:'mid'}
+      ],
+      correctSlot:3,
+      success:'완벽합니다. 후반에는 이렇게 긴 구간 하나를 지키는 선택이 점수 차이를 크게 만듭니다.',
+      error:'이 카드는 19 뒤에 가면 흐름이 끊깁니다. 12 다음, 19 이전에 들어가야 긴 구간이 유지됩니다.'
+    }
   }
 ];
 let deck=[],ci=0,pBoard=Array(20).fill(0),aBoard=Array(20).fill(0),
@@ -496,6 +561,9 @@ let deck=[],ci=0,pBoard=Array(20).fill(0),aBoard=Array(20).fill(0),
 const SURVEY_DRAFT_KEY='streams-survey-draft';
 const leaderboardState={data:null,period:'daily',targetPlayerId:null,expanded:false};
 let tutorialStepIndex=0;
+let tutorialMode='explain';
+let tutorialFeedback=null;
+let tutorialPlacedSlot=null;
 
 function surveyDraft(){
   return {
@@ -578,12 +646,28 @@ function tutorialSlotMarkup(slot){
   const badClass=slot.bad?' bad':'';
   return `<div class="tutorial-slot ${tone}${extraClass}${badClass}"><div class="tutorial-slot-number">${slot.value}</div></div>`;
 }
-function renderTutorialModal(){
-  const step=TUTORIAL_STEPS[tutorialStepIndex];
-  const body=document.getElementById('tutorial-modal-body');
+function tutorialPracticeSlotMarkup(slot,index,step){
+  if(slot.empty){
+    const isSelected=tutorialPlacedSlot===index;
+    const classes=['tutorial-slot','empty','clickable'];
+    if(slot.target)classes.push('target');
+    if(isSelected)classes.push('filled-preview');
+    const cardMarkup=isSelected
+      ? `<div class="tutorial-slot-number">${step.practice.currentCard}</div>`
+      : '<div class="tutorial-slot-number">?</div>';
+    return `<button type="button" class="${classes.join(' ')}" onclick="handleTutorialPlacement(${index})">${cardMarkup}<div class="tutorial-slot-index">${slot.index||''}</div></button>`;
+  }
+  const tone=slot.type==='high'?'card-high':slot.type==='mid'?'card-mid':'card-low';
+  return `<div class="tutorial-slot ${tone}"><div class="tutorial-slot-number">${slot.value}</div></div>`;
+}
+function tutorialFeedbackMarkup(){
+  if(!tutorialFeedback)return '';
+  return `<div class="tutorial-feedback ${tutorialFeedback.type}">${tutorialFeedback.text}</div>`;
+}
+function renderTutorialExplainStep(step){
   const dots=TUTORIAL_STEPS.map((_,index)=>`<span class="tutorial-dot ${index===tutorialStepIndex?'active':''}"></span>`).join('');
   const tips=(step.tips||[]).map(text=>`<div class="tutorial-tip">${text}</div>`).join('');
-  body.innerHTML=`
+  return `
     <div class="tutorial-progress">${dots}</div>
     <div class="tutorial-step-title">${step.title}</div>
     <div class="tutorial-step-desc">${step.desc}</div>
@@ -594,33 +678,103 @@ function renderTutorialModal(){
     </div>
     <div class="tutorial-tip-list">${tips}</div>
     <div class="tutorial-actions">
-      <div class="tutorial-counter">${tutorialStepIndex+1} / ${TUTORIAL_STEPS.length}</div>
+      <div class="tutorial-counter">${tutorialStepIndex+1} / ${TUTORIAL_STEPS.length} 설명</div>
       <div class="tutorial-nav">
         <button class="btn-secondary" onclick="prevTutorialStep()" ${tutorialStepIndex===0?'disabled':''}>이전</button>
-        ${tutorialStepIndex===TUTORIAL_STEPS.length-1
-          ? '<button class="btn-start" onclick="startFromTutorial()">튜토리얼 끝내고 시작</button>'
-          : '<button class="btn-start" onclick="nextTutorialStep()">다음</button>'}
+        <button class="btn-start" onclick="startTutorialPractice()">직접 배치해보기</button>
       </div>
     </div>
   `;
 }
+function renderTutorialPracticeStep(step){
+  const dots=TUTORIAL_STEPS.map((_,index)=>`<span class="tutorial-dot ${index===tutorialStepIndex?'active':''}"></span>`).join('');
+  const success=tutorialFeedback&&tutorialFeedback.type==='success';
+  return `
+    <div class="tutorial-progress">${dots}</div>
+    <div class="tutorial-step-title">${step.title} 배치 연습</div>
+    <div class="tutorial-step-desc">${step.practice.prompt}</div>
+    <div class="tutorial-practice-head">
+      <div class="tutorial-current-card">
+        <div class="label">Current Card</div>
+        <div class="number-card card-lg ${cc(step.practice.currentCard)} ${cg(step.practice.currentCard)}">${step.practice.currentCard}</div>
+      </div>
+      <div class="tutorial-counter">${tutorialStepIndex+1} / ${TUTORIAL_STEPS.length} 실전 연습</div>
+    </div>
+    <div class="tutorial-example">
+      <div class="tutorial-example-label">직접 눌러서 배치하기</div>
+      <div class="tutorial-board">${step.practice.board.map((slot,index)=>tutorialPracticeSlotMarkup(slot,index,step)).join('')}</div>
+      <div class="tutorial-caption">${step.caption}</div>
+    </div>
+    ${tutorialFeedbackMarkup()}
+    <div class="tutorial-actions">
+      <div class="tutorial-nav">
+        <button class="btn-secondary" onclick="returnToTutorialExplain()">설명 다시 보기</button>
+        ${success
+          ? (tutorialStepIndex===TUTORIAL_STEPS.length-1
+            ? '<button class="btn-start" onclick="startFromTutorial()">튜토리얼 끝내고 시작</button>'
+            : '<button class="btn-start" onclick="nextTutorialStep()">다음 설명 보기</button>')
+          : ''}
+      </div>
+    </div>
+  `;
+}
+function renderTutorialModal(){
+  const step=TUTORIAL_STEPS[tutorialStepIndex];
+  const body=document.getElementById('tutorial-modal-body');
+  body.innerHTML=tutorialMode==='practice'?renderTutorialPracticeStep(step):renderTutorialExplainStep(step);
+}
 function openTutorialModal(stepIndex=0){
   tutorialStepIndex=Math.max(0, Math.min(stepIndex, TUTORIAL_STEPS.length-1));
+  tutorialMode='explain';
+  tutorialFeedback=null;
+  tutorialPlacedSlot=null;
   document.getElementById('tutorial-modal').style.display='flex';
   renderTutorialModal();
 }
 function closeTutorialModal(){
   document.getElementById('tutorial-modal').style.display='none';
 }
+function startTutorialPractice(){
+  tutorialMode='practice';
+  tutorialFeedback=null;
+  tutorialPlacedSlot=null;
+  renderTutorialModal();
+}
+function returnToTutorialExplain(){
+  tutorialMode='explain';
+  tutorialFeedback=null;
+  tutorialPlacedSlot=null;
+  renderTutorialModal();
+}
+function handleTutorialPlacement(index){
+  const step=TUTORIAL_STEPS[tutorialStepIndex];
+  tutorialPlacedSlot=index;
+  if(index===step.practice.correctSlot){
+    tutorialFeedback={type:'success',text:step.practice.success};
+  }else{
+    tutorialFeedback={type:'error',text:step.practice.error};
+  }
+  renderTutorialModal();
+}
 function nextTutorialStep(){
   if(tutorialStepIndex<TUTORIAL_STEPS.length-1){
     tutorialStepIndex+=1;
+    tutorialMode='explain';
+    tutorialFeedback=null;
+    tutorialPlacedSlot=null;
     renderTutorialModal();
   }
 }
 function prevTutorialStep(){
+  if(tutorialMode==='practice'){
+    returnToTutorialExplain();
+    return;
+  }
   if(tutorialStepIndex>0){
     tutorialStepIndex-=1;
+    tutorialMode='explain';
+    tutorialFeedback=null;
+    tutorialPlacedSlot=null;
     renderTutorialModal();
   }
 }
