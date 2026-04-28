@@ -596,7 +596,7 @@ const TUTORIAL_STEPS=[
 ];
 let deck=[],ci=0,pBoard=Array(20).fill(0),aBoard=Array(20).fill(0),
     turnPhase='player',gameActive=false,lastAi=-1,lastQ=null,showQ=false,
-    playerName='Anonymous',playerId=null,history={w:0,l:0,d:0},turnLog=[],gameStartedAt=0;
+    playerName='Anonymous',playerId=null,playerToken='',gameToken='',history={w:0,l:0,d:0},turnLog=[],gameStartedAt=0;
 const SURVEY_DRAFT_KEY='streams-survey-draft';
 const leaderboardState={data:null,period:'daily',targetPlayerId:null,expanded:false};
 let tutorialStepIndex=0;
@@ -847,16 +847,18 @@ async function submitSurveyAndStart(){
       body:JSON.stringify({player_name:name,age,gender,mbti,playtime,genres})
     });
     const data=await res.json();
-    if(!res.ok||!data.player_id){
+    if(!res.ok||!data.player_id||!data.player_token){
       throw new Error(data.message||'survey save failed');
     }
     playerId=data.player_id;
+    playerToken=data.player_token;
     clearSurveyDraft();
-    startGame();
+    await startGame();
   }catch(e){
     errEl.textContent='설문 저장에 실패했습니다. 잠시 후 다시 시도해주세요.';
     errEl.style.display='block';
     playerId=null;
+    playerToken='';
   }
 }
 
@@ -875,7 +877,22 @@ function renderST(){let html='';for(const [streak,points] of Object.entries(ST))
 function toggleQValues(){showQ=!showQ;document.getElementById('qval-toggle').classList.toggle('active',showQ);renderAB();}
 async function checkServer(){try{const res=await fetch('/api/health');const data=await res.json();if(data.ai_ready){document.getElementById('status-dot').style.background='var(--green)';document.getElementById('status-text').textContent=data.model_loaded?`모델 로드 완료 (${String(data.device).toUpperCase()})`:`fallback AI 준비됨 (${String(data.device).toUpperCase()})`;}else{document.getElementById('status-dot').style.background='var(--yellow)';document.getElementById('status-text').textContent='서버 연결됨';}}catch(e){document.getElementById('status-dot').style.background='var(--red)';document.getElementById('status-text').textContent='서버 연결 실패';}}
 async function requestAi(){try{const res=await fetch('/api/ai_move',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({board:aBoard,current_num:deck[ci],deck,current_index:ci})});return await res.json();}catch(e){const empty=aBoard.map((value,index)=>value===0?index:-1).filter(index=>index>=0);return{action:empty[Math.floor(Math.random()*empty.length)]||0,q_values:null};}}
-async function saveGame(result){const scores=updateScores();try{const res=await fetch('/api/save_game',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({player_id:playerId,player_name:playerName,deck,player_board:pBoard,ai_board:aBoard,player_score:scores.ps,ai_score:scores.as_,duration_ms:getElapsedDurationMs(),result,turns:turnLog})});return res.ok;}catch(e){return false;}}
+async function createGameSession(){
+  if(!playerId||!playerToken){
+    throw new Error('player session missing');
+  }
+  const res=await fetch('/api/start_game',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({player_id:playerId,player_token:playerToken})
+  });
+  const data=await res.json();
+  if(!res.ok||!Array.isArray(data.deck)||!data.game_token){
+    throw new Error(data.message||'game start failed');
+  }
+  return data;
+}
+async function saveGame(result){const scores=updateScores();try{const res=await fetch('/api/save_game',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({player_id:playerId,player_token:playerToken,game_token:gameToken,player_name:playerName,deck,player_board:pBoard,ai_board:aBoard,player_score:scores.ps,ai_score:scores.as_,duration_ms:getElapsedDurationMs(),result,turns:turnLog})});return res.ok;}catch(e){return false;}}
 function leaderboardTabsMarkup(){return `<div class="leaderboard-tabs">${Object.entries(PERIOD_LABELS).map(([period,label])=>`<button class="leaderboard-tab ${leaderboardState.period===period?'active':''}" onclick="setLeaderboardPeriod('${period}')">${label}</button>`).join('')}</div>`;}
 function leaderboardRowsMarkup(rows){
   if(!rows||!rows.length){
@@ -899,7 +916,7 @@ function toggleLeaderboardExpanded(){leaderboardState.expanded=!leaderboardState
 async function fetchLeaderboard(targetPlayerId){try{const query=targetPlayerId?`?player_id=${encodeURIComponent(targetPlayerId)}`:'';const res=await fetch(`/api/leaderboard${query}`);if(!res.ok)throw new Error('leaderboard fetch failed');return await res.json();}catch(e){return null;}}
 async function openLeaderboardModal(targetPlayerId=null,period='daily'){leaderboardState.period=period;leaderboardState.targetPlayerId=targetPlayerId;leaderboardState.expanded=false;document.getElementById('leaderboard-modal').style.display='flex';document.getElementById('leaderboard-modal-body').innerHTML='<div class="leaderboard-empty">리더보드를 불러오는 중입니다.</div>';leaderboardState.data=await fetchLeaderboard(targetPlayerId);renderLeaderboardModal();}
 function closeLeaderboardModal(){document.getElementById('leaderboard-modal').style.display='none';}
-function startGame(){closeLeaderboardModal();document.getElementById('survey').style.display='none';deck=shuffle(buildPool()).slice(0,20);ci=0;pBoard=Array(20).fill(0);aBoard=Array(20).fill(0);turnPhase='player';gameActive=true;lastAi=-1;lastQ=null;turnLog=[];gameStartedAt=Date.now();document.getElementById('menu').style.display='none';document.getElementById('game').style.display='flex';document.getElementById('result-area').style.display='none';document.getElementById('result-area').innerHTML='';document.getElementById('card-area').style.display='flex';document.getElementById('round-display').textContent='1/20';document.getElementById('turn-msg').className='player-prompt';document.getElementById('turn-msg').textContent='카드를 배치하세요';document.getElementById('ai-note').textContent='';renderCard();renderPB();renderAB();updateScores();renderST();}
+async function startGame(){closeLeaderboardModal();try{const session=await createGameSession();deck=session.deck;gameToken=session.game_token;}catch(e){const errEl=document.getElementById('survey-error');const surveyVisible=getComputedStyle(document.getElementById('survey')).display!=='none';if(errEl&&surveyVisible){errEl.textContent='게임 세션을 시작하지 못했습니다. 잠시 후 다시 시도해주세요.';errEl.style.display='block';}else{window.alert('게임 세션을 시작하지 못했습니다. 잠시 후 다시 시도해주세요.');}return;}document.getElementById('survey').style.display='none';ci=0;pBoard=Array(20).fill(0);aBoard=Array(20).fill(0);turnPhase='player';gameActive=true;lastAi=-1;lastQ=null;turnLog=[];gameStartedAt=Date.now();document.getElementById('menu').style.display='none';document.getElementById('game').style.display='flex';document.getElementById('result-area').style.display='none';document.getElementById('result-area').innerHTML='';document.getElementById('card-area').style.display='flex';document.getElementById('round-display').textContent='1/20';document.getElementById('turn-msg').className='player-prompt';document.getElementById('turn-msg').textContent='카드를 배치하세요';document.getElementById('ai-note').textContent='';renderCard();renderPB();renderAB();updateScores();renderST();}
 async function place(index){if(!gameActive||turnPhase!=='player'||pBoard[index])return;const num=deck[ci];pBoard[index]=num;turnPhase='ai';renderPB();updateScores();const turnMsg=document.getElementById('turn-msg');turnMsg.className='ai-thinking';turnMsg.textContent='AI 계산 중...';const res=await requestAi();await new Promise(resolve=>setTimeout(resolve,400));const aiAction=res.action;aBoard[aiAction]=num;lastAi=aiAction;lastQ=res.q_values||null;document.getElementById('ai-note').textContent=`AI는 ${aiAction+1}번 칸에 배치`;renderAB();const {ps,as_}=updateScores();turnLog.push({turn:ci+1,card:num,card_order:ci+1,deck_index:ci,player_slot:index,ai_slot:aiAction,player_score_after:ps,ai_score_after:as_});ci++;if(ci>=20){endGame();return;}document.getElementById('round-display').textContent=`${ci+1}/20`;turnPhase='player';turnMsg.className='player-prompt';turnMsg.textContent='카드를 배치하세요';renderCard();renderPB();}
 async function endGame(){gameActive=false;const ps=calcScore(pBoard),as_=calcScore(aBoard),durationMs=getElapsedDurationMs(),durationLabel=formatDuration(durationMs);let resultClass,message,result;if(ps>as_){resultClass='win';message='플레이어 승리!';result='win';history.w++;}else if(ps<as_){resultClass='lose';message='AI 승리';result='lose';history.l++;}else{resultClass='draw';message='무승부';result='draw';history.d++;}document.getElementById('card-area').style.display='none';document.getElementById('round-display').textContent='END';const saved=await saveGame(result);const resultArea=document.getElementById('result-area');resultArea.style.display='block';resultArea.innerHTML=`<div class="result-box ${resultClass}"><div class="result-msg">${message}</div><div class="result-detail">${playerName} ${ps} : ${as_} AI | ${durationLabel}</div><div class="result-saved" style="color:${saved?'var(--green)':'#ffd36d'}">${saved?'결과 저장 완료되었습니다.':'결과 저장에 실패했습니다.'}</div><button class="btn-retry" onclick="goMenu()">메뉴로</button><button class="btn-retry" onclick="openLeaderboardModal(playerId)" style="margin-left:8px">리더보드</button><button class="btn-retry" onclick="startGame()" style="margin-left:8px">다시 시작</button></div>`;renderPB();renderAB();updateRecord();if(saved){openLeaderboardModal(playerId);}}
 function goMenu(){document.getElementById('game').style.display='none';document.getElementById('menu').style.display='flex';updateRecord();}

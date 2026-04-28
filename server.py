@@ -9,7 +9,13 @@ import io
 import json
 import os
 import random
+import base64
+import hashlib
+import hmac
+import secrets
+import time
 from datetime import datetime, timedelta, timezone
+from collections import Counter
 from functools import cmp_to_key
 from zoneinfo import ZoneInfo
 
@@ -74,12 +80,185 @@ print(f"[Server Device] {DEVICE}")
 
 KST = ZoneInfo("Asia/Seoul")
 PERIOD_LABELS = {"daily": "24 Hours", "weekly": "7 Days", "overall": "Overall"}
+TOKEN_MAX_AGE_SECONDS = 6 * 60 * 60
+STREAMS_TOKEN_SECRET = (
+    os.environ.get("STREAMS_TOKEN_SECRET")
+    or os.environ.get("VERCEL_OIDC_TOKEN")
+    or SUPABASE_SERVICE_ROLE_KEY
+    or "streams-dev-secret"
+).encode("utf-8")
 
 
 def sb():
     if not SUPABASE_AVAILABLE or SUPABASE_CLIENT is None:
         raise RuntimeError("Supabase client is not configured")
     return SUPABASE_CLIENT
+
+
+def _urlsafe_b64encode(raw):
+    return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
+
+
+def _urlsafe_b64decode(text):
+    padded = text + "=" * (-len(text) % 4)
+    return base64.urlsafe_b64decode(padded.encode("ascii"))
+
+
+def issue_signed_token(payload):
+    body = _urlsafe_b64encode(json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+    signature = hmac.new(STREAMS_TOKEN_SECRET, body.encode("ascii"), hashlib.sha256).digest()
+    return f"{body}.{_urlsafe_b64encode(signature)}"
+
+
+def verify_signed_token(token, purpose, max_age_seconds=TOKEN_MAX_AGE_SECONDS):
+    if not token or "." not in str(token):
+        return None
+    body, signature = str(token).split(".", 1)
+    expected = _urlsafe_b64encode(hmac.new(STREAMS_TOKEN_SECRET, body.encode("ascii"), hashlib.sha256).digest())
+    if not hmac.compare_digest(signature, expected):
+        return None
+    try:
+        payload = json.loads(_urlsafe_b64decode(body).decode("utf-8"))
+    except Exception:
+        return None
+    if payload.get("purpose") != purpose:
+        return None
+    issued_at = int(payload.get("iat") or 0)
+    if issued_at <= 0 or (int(time.time()) - issued_at) > max_age_seconds:
+        return None
+    return payload
+
+
+def issue_player_token(player_id, player_name):
+    return issue_signed_token(
+        {
+            "purpose": "player",
+            "player_id": normalize_id(player_id),
+            "player_name": str(player_name or "Anonymous"),
+            "iat": int(time.time()),
+        }
+    )
+
+
+def issue_game_token(player_id, deck):
+    return issue_signed_token(
+        {
+            "purpose": "game",
+            "player_id": normalize_id(player_id),
+            "deck": deck,
+            "nonce": secrets.token_hex(8),
+            "iat": int(time.time()),
+        }
+    )
+
+
+def build_number_pool():
+    pool = list(range(1, 11))
+    for value in range(11, 21):
+        pool.extend([value, value])
+    pool.extend(range(21, 31))
+    return pool
+
+
+def draw_server_deck():
+    return random.sample(build_number_pool(), 20)
+
+
+def validate_int_list(values, expected_length):
+    if not isinstance(values, list) or len(values) != expected_length:
+        return None
+    normalized = []
+    for value in values:
+        try:
+            normalized.append(int(value))
+        except (TypeError, ValueError):
+            return None
+    return normalized
+
+
+def validate_deck(deck):
+    normalized = validate_int_list(deck, 20)
+    if normalized is None:
+        return None
+    allowed = Counter(build_number_pool())
+    counts = Counter(normalized)
+    for value, count in counts.items():
+        if value < 1 or value > 30 or count > allowed.get(value, 0):
+            return None
+    return normalized
+
+
+def calc_streams_score(board):
+    values = [value for value in board if value]
+    if not values:
+        return 0
+    streak_points = {
+        1: 0,
+        2: 1,
+        3: 3,
+        4: 5,
+        5: 7,
+        6: 9,
+        7: 11,
+        8: 15,
+        9: 20,
+        10: 25,
+        11: 30,
+        12: 35,
+        13: 40,
+        14: 50,
+        15: 60,
+        16: 70,
+        17: 85,
+        18: 100,
+        19: 150,
+        20: 300,
+    }
+    score = 0
+    index = 0
+    while index < len(values):
+        end = index
+        while end + 1 < len(values) and values[end] <= values[end + 1]:
+            end += 1
+        score += streak_points.get(end - index + 1, 0)
+        index = end + 1
+    return score
+
+
+def validate_turn_rows(turns, deck):
+    if not isinstance(turns, list) or len(turns) != len(deck):
+        return None, "Turn log is incomplete"
+    player_slots_seen = set()
+    ai_slots_seen = set()
+    player_board = [0] * len(deck)
+    ai_board = [0] * len(deck)
+
+    for expected_index, turn in enumerate(turns):
+        try:
+            turn_number = int(turn.get("turn"))
+            card_value = int(turn.get("card"))
+            card_order = int(turn.get("card_order", turn_number))
+            deck_index = int(turn.get("deck_index", turn_number - 1))
+            player_slot = int(turn.get("player_slot"))
+            ai_slot = int(turn.get("ai_slot"))
+        except (TypeError, ValueError, AttributeError):
+            return None, "Turn log contains invalid values"
+
+        if turn_number != expected_index + 1 or card_order != expected_index + 1 or deck_index != expected_index:
+            return None, "Turn log order is invalid"
+        if card_value != deck[expected_index]:
+            return None, "Turn log does not match the issued deck"
+        if not 0 <= player_slot < len(deck) or not 0 <= ai_slot < len(deck):
+            return None, "Turn slots are out of range"
+        if player_slot in player_slots_seen or ai_slot in ai_slots_seen:
+            return None, "Turn slots are duplicated"
+
+        player_slots_seen.add(player_slot)
+        ai_slots_seen.add(ai_slot)
+        player_board[player_slot] = card_value
+        ai_board[ai_slot] = card_value
+
+    return {"player_board": player_board, "ai_board": ai_board}, None
 
 
 def resp_data(response):
@@ -521,9 +700,21 @@ def save_survey():
         resp = sb().table("players").insert(payload).execute()
         data = resp_data(resp)
         pid = data[0]["id"] if data else None
-        return jsonify({"status": "saved", "player_id": pid})
+        return jsonify({"status": "saved", "player_id": pid, "player_token": issue_player_token(pid, payload["player_name"])})
     except Exception as exc:
         return jsonify({"status": "error", "message": str(exc)}), 500
+
+
+@app.route("/api/start_game", methods=["POST"])
+def start_game_session():
+    d = request.json or {}
+    player_id = normalize_id(d.get("player_id"))
+    player_token = verify_signed_token(d.get("player_token"), "player")
+    if not player_token or player_token.get("player_id") != player_id:
+        return jsonify({"status": "error", "message": "Invalid player session"}), 403
+
+    deck = draw_server_deck()
+    return jsonify({"status": "ok", "deck": deck, "game_token": issue_game_token(player_id, deck)})
 
 
 @app.route("/api/save_game", methods=["POST"])
@@ -532,19 +723,56 @@ def save_game():
     if err:
         return err
 
-    d = request.json
+    d = request.json or {}
     try:
+        player_id = normalize_id(d.get("player_id"))
+        player_token = verify_signed_token(d.get("player_token"), "player")
+        game_token = verify_signed_token(d.get("game_token"), "game")
+        if not player_token or player_token.get("player_id") != player_id:
+            return jsonify({"status": "error", "message": "Invalid player token"}), 403
+        if not game_token or game_token.get("player_id") != player_id:
+            return jsonify({"status": "error", "message": "Invalid game token"}), 403
+
+        deck = validate_deck(d.get("deck"))
+        if deck is None:
+            return jsonify({"status": "error", "message": "Invalid deck"}), 400
+        token_deck = validate_deck(game_token.get("deck"))
+        if token_deck is None or deck != token_deck:
+            return jsonify({"status": "error", "message": "Deck mismatch"}), 400
+
+        validated_turns, turn_error = validate_turn_rows(d.get("turns", []), deck)
+        if turn_error:
+            return jsonify({"status": "error", "message": turn_error}), 400
+
+        player_board = validate_int_list(d.get("player_board"), 20)
+        ai_board = validate_int_list(d.get("ai_board"), 20)
+        if player_board is None or ai_board is None:
+            return jsonify({"status": "error", "message": "Invalid board"}), 400
+        if player_board != validated_turns["player_board"] or ai_board != validated_turns["ai_board"]:
+            return jsonify({"status": "error", "message": "Submitted board does not match turn log"}), 400
+
+        if Counter(player_board) != Counter(deck) or Counter(ai_board) != Counter(deck):
+            return jsonify({"status": "error", "message": "Board contents do not match deck"}), 400
+
+        computed_player_score = calc_streams_score(player_board)
+        computed_ai_score = calc_streams_score(ai_board)
+        computed_result = "draw"
+        if computed_player_score > computed_ai_score:
+            computed_result = "win"
+        elif computed_player_score < computed_ai_score:
+            computed_result = "lose"
+
         game_payload = {
-            "player_id": d.get("player_id"),
+            "player_id": player_id,
             "player_name": d.get("player_name", "Anonymous"),
-            "deck": d["deck"],
-            "player_board": d["player_board"],
-            "ai_board": d["ai_board"],
-            "player_score": d["player_score"],
-            "ai_score": d["ai_score"],
+            "deck": deck,
+            "player_board": player_board,
+            "ai_board": ai_board,
+            "player_score": computed_player_score,
+            "ai_score": computed_ai_score,
             "duration_ms": max(0, int(d.get("duration_ms") or 0)),
-            "result": d["result"],
-            "turn_sequence": [t.get("card") for t in d.get("turns", [])],
+            "result": computed_result,
+            "turn_sequence": deck,
         }
         try:
             game_resp = sb().table("games").insert(game_payload).execute()
