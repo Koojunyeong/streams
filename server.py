@@ -188,6 +188,18 @@ def validate_deck(deck):
     return normalized
 
 
+def validate_board(board):
+    normalized = validate_int_list(board, 20)
+    if normalized is None:
+        return None
+    allowed = Counter(build_number_pool())
+    counts = Counter(value for value in normalized if value)
+    for value, count in counts.items():
+        if value < 1 or value > 30 or count > allowed.get(value, 0):
+            return None
+    return normalized
+
+
 def calc_streams_score(board):
     values = [value for value in board if value]
     if not values:
@@ -576,15 +588,15 @@ def get_prob_mask(board, num, deck, ci):
                 rv, ri = board[r], r
                 break
 
-        if not (lv < num < rv):
+        if not (lv <= num <= rv):
             mask.append(0.0)
             continue
 
-        if i - li - 1 > 0 and sum(1 for c in rem if lv < c < num) < i - li - 1:
+        if i - li - 1 > 0 and sum(1 for c in rem if lv <= c <= num) < i - li - 1:
             mask.append(0.0)
             continue
 
-        if ri - i - 1 > 0 and sum(1 for c in rem if num < c < rv) < ri - i - 1:
+        if ri - i - 1 > 0 and sum(1 for c in rem if num <= c <= rv) < ri - i - 1:
             mask.append(0.0)
             continue
 
@@ -657,12 +669,22 @@ def health():
 
 @app.route("/api/ai_move", methods=["POST"])
 def ai_move():
-    d = request.json
-    board, num, deck, ci = d["board"], d["current_num"], d["deck"], d["current_index"]
+    d = request.get_json(silent=True) or {}
+    board = validate_board(d.get("board"))
+    deck = validate_deck(d.get("deck"))
+    try:
+        num = int(d.get("current_num"))
+        ci = int(d.get("current_index"))
+    except (TypeError, ValueError):
+        return jsonify({"status": "error", "message": "Invalid AI move payload"}), 400
+
+    if board is None or deck is None or not 0 <= ci < len(deck) or deck[ci] != num:
+        return jsonify({"status": "error", "message": "Invalid AI move payload"}), 400
+
     pm = get_prob_mask(board, num, deck, ci)
-    st = build_state(board, num, deck, ci)
 
     if TORCH_AVAILABLE and loaded:
+        st = build_state(board, num, deck, ci)
         fb = np.where(np.array(board) == 0)[0]
         if len(fb) == 0:
             return jsonify({"action": 0, "q_values": [0] * 20, "prob_mask": pm.tolist()})
