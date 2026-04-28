@@ -381,9 +381,11 @@ def build_leaderboards(player_rows, game_rows, target_player_id=None):
                 target_identity_key = target_identity["identity_key"]
 
     now_kst = datetime.now(KST)
+    start_of_today_kst = now_kst.replace(hour=0, minute=0, second=0, microsecond=0)
+    start_of_week_kst = start_of_today_kst - timedelta(days=start_of_today_kst.weekday())
     cutoffs = {
-        "daily": now_kst - timedelta(days=1),
-        "weekly": now_kst - timedelta(days=7),
+        "daily": start_of_today_kst,
+        "weekly": start_of_week_kst,
         "overall": None,
     }
     best_by_period = {period: {} for period in cutoffs}
