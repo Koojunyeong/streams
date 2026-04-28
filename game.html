@@ -109,6 +109,18 @@
   .leaderboard-tab{padding:8px 14px;border-radius:999px;border:1px solid var(--border);background:var(--card);color:var(--dim);cursor:pointer;font-size:12px;font-weight:700;transition:all .2s}
   .leaderboard-tab:hover{border-color:var(--blue);color:var(--blue)}
   .leaderboard-tab.active{border-color:var(--gold);background:#f0c87e1a;color:var(--gold)}
+  .leaderboard-week-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px}
+  .leaderboard-week-day{border:1px solid var(--border);border-radius:14px;background:rgba(255,255,255,.03);padding:12px 10px;min-height:220px;display:flex;flex-direction:column;gap:10px}
+  .leaderboard-week-head{display:flex;flex-direction:column;gap:4px;padding-bottom:8px;border-bottom:1px solid rgba(255,255,255,.06)}
+  .leaderboard-week-name{font-size:12px;font-weight:800;color:var(--gold)}
+  .leaderboard-week-date{font-size:11px;color:var(--dim)}
+  .leaderboard-week-list{display:flex;flex-direction:column;gap:8px}
+  .leaderboard-week-item{padding:10px;border-radius:10px;background:rgba(12,17,27,.92);border:1px solid rgba(255,255,255,.04)}
+  .leaderboard-week-rank{font-family:var(--mono);font-size:11px;color:var(--gold);margin-bottom:6px}
+  .leaderboard-week-player{font-size:12px;font-weight:700;color:var(--text);margin-bottom:4px;word-break:break-word}
+  .leaderboard-week-score{font-family:var(--mono);font-size:13px;font-weight:800;color:var(--blue)}
+  .leaderboard-week-time{font-family:var(--mono);font-size:11px;color:var(--gold)}
+  .leaderboard-week-empty{margin-top:auto;font-size:11px;color:var(--faint)}
   .modal-overlay{display:none;position:fixed;inset:0;background:rgba(7,10,17,.74);backdrop-filter:blur(10px);align-items:center;justify-content:center;padding:20px;z-index:100}
   .modal-panel{width:min(720px,100%);max-height:90vh;overflow:auto;background:linear-gradient(180deg,#0f1624,#0a0e17);border:1px solid var(--border);border-radius:20px;padding:22px;box-shadow:0 28px 80px rgba(0,0,0,.35)}
   .modal-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:16px}
@@ -222,7 +234,7 @@
 
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
   @keyframes popIn{0%{transform:scale(.5);opacity:0}70%{transform:scale(1.1)}100%{transform:scale(1);opacity:1}}
-  @media (max-width: 900px){.menu-actions,.survey-actions{width:100%}.menu-actions .btn-start,.menu-actions .btn-secondary,.survey-actions .btn-start,.survey-actions .btn-secondary{width:100%}.modal-panel{padding:18px}.leaderboard-item{grid-template-columns:42px 1fr}.leaderboard-main{flex-direction:column;align-items:flex-start}.leaderboard-identity,.leaderboard-stats{width:100%}.leaderboard-stats{justify-content:flex-start;flex-wrap:wrap}.tutorial-entry-top,.tutorial-actions{flex-direction:column;align-items:flex-start}.tutorial-nav{width:100%}.tutorial-nav .btn-secondary,.tutorial-nav .btn-start{width:100%}}
+  @media (max-width: 900px){.menu-actions,.survey-actions{width:100%}.menu-actions .btn-start,.menu-actions .btn-secondary,.survey-actions .btn-start,.survey-actions .btn-secondary{width:100%}.modal-panel{padding:18px}.leaderboard-item{grid-template-columns:42px 1fr}.leaderboard-main{flex-direction:column;align-items:flex-start}.leaderboard-identity,.leaderboard-stats{width:100%}.leaderboard-stats{justify-content:flex-start;flex-wrap:wrap}.leaderboard-week-grid{grid-template-columns:1fr}.leaderboard-week-day{min-height:0}.tutorial-entry-top,.tutorial-actions{flex-direction:column;align-items:flex-start}.tutorial-nav{width:100%}.tutorial-nav .btn-secondary,.tutorial-nav .btn-start{width:100%}}
 </style>
 </head>
 <body>
@@ -431,6 +443,7 @@
 <script>
 const ST={1:0,2:1,3:3,4:5,5:7,6:9,7:11,8:15,9:20,10:25,11:30,12:35,13:40,14:50,15:60,16:70,17:85,18:100,19:150,20:300};
 const PERIOD_LABELS={daily:'일일',weekly:'일주일',overall:'전체'};
+const WEEKDAY_LABELS=['월','화','수','목','금','토','일'];
 const TUTORIAL_STEPS=[
   {
     title:'목표는 긴 오름차순 줄 만들기',
@@ -901,7 +914,27 @@ function leaderboardRowsMarkup(rows){
   const visibleRows=leaderboardState.expanded?rows.slice(0,100):rows.slice(0,5);
   return `<div class="leaderboard-list">${visibleRows.map(row=>`<div class="leaderboard-item"><div class="leaderboard-rank">#${row.rank}</div><div class="leaderboard-main"><div class="leaderboard-identity"><div class="leaderboard-name">${row.display_name}</div><div class="leaderboard-date">${row.played_at_label}</div></div><div class="leaderboard-stats"><div class="leaderboard-value">${row.score}점</div><div class="leaderboard-divider">/</div><div class="leaderboard-time">${row.duration_label}</div></div></div></div>`).join('')}</div>`;
 }
+function leaderboardWeeklyMarkup(rows){
+  const dayBuckets=WEEKDAY_LABELS.map((_,index)=>({index, rows:[]}));
+  (rows||[]).forEach(row=>{
+    const weekday=Number(row.played_weekday);
+    if(Number.isInteger(weekday)&&weekday>=0&&weekday<7){
+      dayBuckets[weekday].rows.push(row);
+    }
+  });
+  return `<div class="leaderboard-week-grid">${dayBuckets.map(day=>{
+    const firstRow=day.rows[0];
+    const dateLabel=firstRow?firstRow.played_day_label:'';
+    const items=day.rows.length
+      ? `<div class="leaderboard-week-list">${day.rows.map(row=>`<div class="leaderboard-week-item"><div class="leaderboard-week-rank">#${row.rank}</div><div class="leaderboard-week-player">${row.display_name}</div><div class="leaderboard-week-score">${row.score}점</div><div class="leaderboard-week-time">${row.duration_label}</div></div>`).join('')}</div>`
+      : '<div class="leaderboard-week-empty">기록 없음</div>';
+    return `<div class="leaderboard-week-day"><div class="leaderboard-week-head"><div class="leaderboard-week-name">${WEEKDAY_LABELS[day.index]}</div><div class="leaderboard-week-date">${dateLabel}</div></div>${items}</div>`;
+  }).join('')}</div>`;
+}
 function leaderboardActionMarkup(rows){
+  if(leaderboardState.period==='weekly'){
+    return '';
+  }
   if(!rows||rows.length<=5){
     return '';
   }
@@ -910,7 +943,7 @@ function leaderboardActionMarkup(rows){
   return `<div class="leaderboard-actions"><button class="leaderboard-more" onclick="toggleLeaderboardExpanded()">${label}</button></div>`;
 }
 function leaderboardSummaryMarkup(period){const summary=leaderboardState.data&&leaderboardState.data.player?leaderboardState.data.player[period]:null;if(!summary)return '';return `<div class="leaderboard-summary">내 현재 순위: ${summary.rank||'-'}위 / ${summary.score}점 / ${summary.duration_label}</div>`;}
-function renderLeaderboardModal(){const modalBody=document.getElementById('leaderboard-modal-body');const data=leaderboardState.data;if(!data||!data.periods){modalBody.innerHTML='<div class="leaderboard-empty">리더보드를 불러오지 못했습니다.</div>';return;}const periodData=data.periods[leaderboardState.period]||{rows:[]};modalBody.innerHTML=`${leaderboardTabsMarkup()}<div class="leaderboard-meta">정렬 기준: 높은 점수순, 동점일 때 더 짧은 시간 우선</div><div class="leaderboard-card">${leaderboardRowsMarkup(periodData.rows)}${leaderboardActionMarkup(periodData.rows)}</div>${leaderboardSummaryMarkup(leaderboardState.period)}`;}
+function renderLeaderboardModal(){const modalBody=document.getElementById('leaderboard-modal-body');const data=leaderboardState.data;if(!data||!data.periods){modalBody.innerHTML='<div class="leaderboard-empty">리더보드를 불러오지 못했습니다.</div>';return;}const periodData=data.periods[leaderboardState.period]||{rows:[]};const bodyMarkup=leaderboardState.period==='weekly'?leaderboardWeeklyMarkup(periodData.rows):leaderboardRowsMarkup(periodData.rows);modalBody.innerHTML=`${leaderboardTabsMarkup()}<div class="leaderboard-meta">정렬 기준: 높은 점수순, 동점일 때 더 짧은 시간 우선</div><div class="leaderboard-card">${bodyMarkup}${leaderboardActionMarkup(periodData.rows)}</div>${leaderboardSummaryMarkup(leaderboardState.period)}`;}
 function setLeaderboardPeriod(period){leaderboardState.period=period;leaderboardState.expanded=false;renderLeaderboardModal();}
 function toggleLeaderboardExpanded(){leaderboardState.expanded=!leaderboardState.expanded;renderLeaderboardModal();}
 async function fetchLeaderboard(targetPlayerId){try{const query=targetPlayerId?`?player_id=${encodeURIComponent(targetPlayerId)}`:'';const res=await fetch(`/api/leaderboard${query}`);if(!res.ok)throw new Error('leaderboard fetch failed');return await res.json();}catch(e){return null;}}

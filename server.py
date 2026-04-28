@@ -416,6 +416,8 @@ def build_leaderboards(player_rows, game_rows, target_player_id=None):
             "duration_ms": max(0, int(game.get("duration_ms") or 0)),
             "played_at": played_at.isoformat(),
             "played_at_label": played_at_kst.strftime("%m/%d %H:%M"),
+            "played_weekday": played_at_kst.weekday(),
+            "played_day_label": played_at_kst.strftime("%m/%d"),
         }
 
         for period, cutoff in cutoffs.items():
@@ -451,6 +453,8 @@ def build_leaderboards(player_rows, game_rows, target_player_id=None):
                     "duration_ms": entry["duration_ms"],
                     "duration_label": format_duration_label(entry["duration_ms"]),
                     "played_at_label": entry["played_at_label"],
+                    "played_weekday": entry["played_weekday"],
+                    "played_day_label": entry["played_day_label"],
                 }
             )
 
