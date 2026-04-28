@@ -5,10 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>STREAMS — Player vs AI</title>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Noto+Sans+KR:wght@400;600;700;900&display=swap" rel="stylesheet">
-<style>
+  <style>
+  @font-face{font-family:'MUNMAK Haebanche';src:url('./MUNMAK_HAEBANCHE.ttf') format('truetype');font-display:swap}
+  @font-face{font-family:'MUNMAK Dalbanche';src:url('./MUNMAK_DALBANCHE.ttf') format('truetype');font-display:swap}
+  @font-face{font-family:'MUNMAK Byeolbanche';src:url('./MUNMAK_BYEOLBANCHE.ttf') format('truetype');font-display:swap}
   :root{--bg:#0a0e17;--bg2:#111827;--card:#0d1117;--border:#1e293b;--text:#e0e0e0;--dim:#888;--faint:#555;
     --blue:#7ec8f0;--purple:#c87ef0;--gold:#f0c87e;--green:#2ea668;--yellow:#a6a62e;--red:#a62e2e;
-    --mono:'JetBrains Mono',monospace;--sans:'Noto Sans KR',sans-serif}
+    --mono:'JetBrains Mono',monospace;--sans:'Noto Sans KR',sans-serif;
+    --coach:'MUNMAK Haebanche','Noto Sans KR',sans-serif;
+    --coach-emph:'MUNMAK Byeolbanche','Noto Sans KR',sans-serif}
   *{box-sizing:border-box;margin:0;padding:0}
   body{background:linear-gradient(180deg,var(--bg),var(--bg2),var(--bg));min-height:100vh;
     font-family:var(--sans);color:var(--text);display:flex;flex-direction:column;align-items:center}
@@ -164,6 +169,67 @@
   .tutorial-slot.clickable:hover{transform:translateY(-2px);border-color:var(--blue);box-shadow:0 8px 20px rgba(126,200,240,.14)}
   .tutorial-slot.filled-preview{box-shadow:0 0 0 2px rgba(46,166,104,.5) inset}
 
+  /* tutorial free-play */
+  #tutorial-game{display:none;flex-direction:column;align-items:center;width:100%;max-width:920px;padding:16px 12px}
+  .tut-header{display:flex;align-items:center;justify-content:space-between;width:100%;margin-bottom:14px;gap:12px;flex-wrap:wrap}
+  .tut-round-box{padding:12px 18px;background:var(--card);border:1px solid var(--border);border-radius:12px;text-align:center}
+  .tut-round-label{font-size:11px;color:var(--dim);letter-spacing:2px;text-transform:uppercase;margin-bottom:4px}
+  .tut-round-value{font-size:22px;font-weight:900;font-family:var(--mono);color:var(--gold)}
+  .tut-quit-btn{padding:10px 18px;font-size:13px;font-family:var(--sans);background:var(--card);color:var(--dim);border:1px solid var(--border);border-radius:10px;cursor:pointer;transition:all .2s}
+  .tut-quit-btn:hover{border-color:var(--red);color:var(--red)}
+  .tut-quit-btn.complete{border-color:var(--green);color:var(--green);font-weight:700}
+  .tut-quit-btn.complete:hover{background:rgba(46,166,104,.12)}
+
+  #tut-overlay{display:none;position:fixed;inset:0;z-index:9000;pointer-events:auto}
+  #tut-overlay-svg{position:absolute;inset:0;width:100%;height:100%}
+  .tut-overlay-bubble{position:absolute;max-width:380px;padding:18px 22px;background:linear-gradient(135deg,#1a1f2e,#10141d);border:1px solid rgba(240,200,126,.4);border-radius:16px;box-shadow:0 24px 60px rgba(0,0,0,.55);z-index:9100}
+  .tut-overlay-bubble .kicker{font-family:var(--coach);font-size:12px;color:var(--gold);letter-spacing:2px;text-transform:uppercase;margin-bottom:6px}
+  .tut-overlay-bubble .title{font-family:var(--coach-emph);font-size:20px;color:var(--text);margin-bottom:8px;line-height:1.3}
+  .tut-overlay-bubble .body{font-family:var(--coach);font-size:15px;line-height:1.6;color:#cdd5e3}
+  .tut-overlay-actions{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:14px}
+  .tut-overlay-step{font-family:var(--mono);font-size:11px;color:var(--dim)}
+  .tut-overlay-buttons{display:flex;gap:8px}
+  .tut-overlay-skip{padding:8px 14px;font-family:var(--coach);font-size:13px;background:transparent;color:var(--dim);border:1px solid var(--border);border-radius:8px;cursor:pointer;transition:all .2s}
+  .tut-overlay-skip:hover{border-color:var(--dim);color:var(--text)}
+  .tut-overlay-next{padding:8px 22px;font-family:var(--coach);font-size:14px;font-weight:700;background:linear-gradient(135deg,#2e6ba6,#7e2ea6);color:#fff;border:none;border-radius:8px;cursor:pointer;transition:transform .15s}
+  .tut-overlay-next:hover{transform:scale(1.05)}
+
+  #tut-coach{display:none;position:fixed;left:50%;bottom:32px;transform:translateX(-50%);width:min(560px,calc(100vw - 32px));z-index:8500;background:linear-gradient(135deg,#1a1f2e,#10141d);border:1px solid rgba(126,200,240,.4);border-radius:18px;padding:18px 22px;box-shadow:0 24px 60px rgba(0,0,0,.5);animation:coachIn .35s ease}
+  @keyframes coachIn{0%{opacity:0;transform:translate(-50%,16px)}100%{opacity:1;transform:translate(-50%,0)}}
+  #tut-coach.warn{border-color:rgba(240,200,126,.5)}
+  #tut-coach .tut-coach-head{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+  #tut-coach .tut-coach-badge{font-family:var(--coach);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);padding:3px 8px;border:1px solid rgba(240,200,126,.3);border-radius:999px}
+  #tut-coach .tut-coach-title{font-family:var(--coach-emph);font-size:17px;color:var(--text);line-height:1.3}
+  #tut-coach .tut-coach-body{font-family:var(--coach);font-size:14px;line-height:1.6;color:#cdd5e3}
+  #tut-coach .tut-coach-foot{display:flex;justify-content:flex-end;margin-top:12px}
+  #tut-coach .tut-coach-ok{padding:8px 22px;font-family:var(--coach);font-size:14px;font-weight:700;background:linear-gradient(135deg,#2e6ba6,#7e2ea6);color:#fff;border:none;border-radius:8px;cursor:pointer}
+
+  .tut-spotlight-target{position:relative;z-index:9050}
+  .tut-score-demo{display:none;width:100%;margin-top:8px}
+  .tut-score-demo.show{display:block}
+  .tut-score-demo-head{font-family:var(--coach-emph);font-size:22px;color:var(--text);text-align:center;margin-bottom:6px}
+  .tut-score-demo-sub{font-family:var(--coach);font-size:14px;color:#bcc6d8;text-align:center;line-height:1.6;margin-bottom:18px}
+  .tut-segments-board{padding:18px 8px;overflow-x:auto;text-align:center;white-space:nowrap}
+  .tut-segments-inner{display:inline-flex;gap:4px;align-items:center;padding:0 8px}
+  .tut-seg-wrap{display:flex;align-items:center;gap:4px;padding:10px 8px 24px;border-radius:14px;border:2px solid transparent;transition:all .5s ease;position:relative}
+  .tut-seg-wrap.run-1{border-color:rgba(126,200,240,.35);background:rgba(126,200,240,.05)}
+  .tut-seg-wrap.run-mid{border-color:rgba(200,126,240,.45);background:rgba(200,126,240,.08)}
+  .tut-seg-wrap.run-long{border-color:rgba(240,200,126,.6);background:rgba(240,200,126,.1);box-shadow:0 0 24px rgba(240,200,126,.18)}
+  .tut-seg-label{position:absolute;left:50%;bottom:-8px;transform:translateX(-50%);font-family:var(--coach);font-size:11px;letter-spacing:1px;color:var(--gold);background:var(--bg2);padding:2px 8px;border-radius:8px;white-space:nowrap}
+  .tut-seg-points{position:absolute;left:50%;top:-12px;transform:translateX(-50%);font-family:var(--mono);font-size:13px;font-weight:800;color:var(--gold);background:var(--bg2);padding:2px 10px;border-radius:8px;border:1px solid rgba(240,200,126,.4);opacity:0;transition:opacity .4s}
+  .tut-seg-points.show{opacity:1}
+  .tut-score-formula{margin:14px auto 0;max-width:560px;padding:18px 22px;background:var(--card);border:1px solid var(--border);border-radius:14px;font-family:var(--mono);font-size:14px;line-height:1.9;color:#cdd5e3;text-align:center}
+  .tut-score-formula .plus{color:var(--faint);margin:0 6px}
+  .tut-score-formula .seg-pts{color:var(--gold);font-weight:800}
+  .tut-score-formula hr{border:none;border-top:1px dashed var(--border);margin:10px 0}
+  .tut-score-total{font-family:var(--coach-emph);font-size:28px;color:var(--gold);letter-spacing:2px}
+  .tut-score-total .label{font-family:var(--coach);font-size:13px;color:var(--dim);letter-spacing:3px;margin-right:10px;text-transform:uppercase}
+  .tut-score-final-actions{display:flex;justify-content:center;gap:12px;margin-top:20px;flex-wrap:wrap}
+  .tut-final-btn{padding:12px 28px;font-family:var(--coach);font-size:14px;font-weight:700;background:linear-gradient(135deg,#2e6ba6,#7e2ea6);color:#fff;border:none;border-radius:10px;cursor:pointer;transition:transform .15s}
+  .tut-final-btn:hover{transform:scale(1.04)}
+  .tut-final-btn.secondary{background:var(--card);color:var(--text);border:1px solid var(--border)}
+  .tut-final-btn.secondary:hover{border-color:var(--purple)}
+
   /* ─── GAME ─── */
   #game{display:none;flex-direction:column;align-items:center;width:100%;max-width:1120px;padding:16px 12px}
   .header{display:flex;align-items:center;justify-content:space-between;width:100%;margin-bottom:14px}
@@ -257,12 +323,12 @@
     <span class="status-dot" id="status-dot" style="background:var(--red)"></span>
     <span id="status-text">서버 연결 확인 중...</span>
   </div>
-  <div class="tutorial-entry" onclick="openTutorialModal()">
+  <div class="tutorial-entry" onclick="startNewTutorial()">
     <div class="tutorial-entry-top">
       <div>
         <div class="tutorial-entry-kicker">Quick Tutorial</div>
-        <div class="tutorial-entry-title">튜토리얼 먼저 보기</div>
-        <div class="tutorial-entry-desc">점수 계산 방식, 카드 배치 감각, 초반에 빈칸을 남겨야 하는 이유를 5단계로 빠르게 익힐 수 있습니다.</div>
+        <div class="tutorial-entry-title">튜토리얼 먼저 해보기</div>
+        <div class="tutorial-entry-desc">고정된 한 판을 자유롭게 두면서, 상황에 맞는 코칭을 받아 핵심 감각을 익힙니다. 모든 플레이어가 동일한 학습 경험을 합니다.</div>
       </div>
       <div class="tutorial-entry-arrow">→</div>
     </div>
@@ -409,6 +475,73 @@
   <div class="score-table-box">
     <div class="score-table-label">SCORING TABLE</div>
     <div class="score-table-row" id="score-table"></div>
+  </div>
+</div>
+
+<div id="tutorial-game">
+  <div class="tut-header">
+    <div class="tut-round-box">
+      <div class="tut-round-label">Round</div>
+      <div class="tut-round-value" id="tut-round-display">1/20</div>
+    </div>
+    <button class="tut-quit-btn" id="tut-quit-btn" onclick="quitTutorial()">튜토리얼 끝내기</button>
+  </div>
+  <div class="current-card-area" id="tut-card-area">
+    <span class="label">현재 카드</span>
+    <div id="tut-current-card"></div>
+    <span id="tut-turn-msg" class="player-prompt" style="font-family:var(--coach)">카드를 배치하세요</span>
+  </div>
+  <div class="board-section">
+    <div class="board-label" style="color:var(--blue)"><span class="icon">▣</span> YOUR BOARD</div>
+    <div class="board-row" id="tut-player-board"></div>
+  </div>
+  <div class="score-table-box">
+    <div class="score-table-label">SCORING TABLE</div>
+    <div class="score-table-row" id="tut-score-table"></div>
+  </div>
+  <div class="tut-score-demo" id="tut-score-demo">
+    <div class="tut-score-demo-head">최종 점수가 이렇게 매겨집니다</div>
+    <div class="tut-score-demo-sub">보드를 왼쪽부터 훑으면서 오름차순 또는 같은 숫자가 이어지는 동안 한 구간으로 묶고, 그 길이만큼 점수를 가져옵니다.</div>
+    <div class="tut-segments-board" id="tut-segments-board"></div>
+    <div class="tut-score-formula" id="tut-score-formula"></div>
+    <div class="tut-score-final-actions">
+      <button class="tut-final-btn" onclick="quitTutorial()">메뉴로 돌아가기</button>
+    </div>
+  </div>
+</div>
+
+<div id="tut-overlay">
+  <svg id="tut-overlay-svg" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
+    <defs>
+      <mask id="tut-spotlight-mask">
+        <rect id="tut-mask-bg" width="100%" height="100%" fill="white"/>
+        <rect id="tut-mask-hole" x="0" y="0" width="0" height="0" rx="14" ry="14" fill="black"/>
+      </mask>
+    </defs>
+    <rect width="100%" height="100%" fill="rgba(5,8,15,0.78)" mask="url(#tut-spotlight-mask)"/>
+  </svg>
+  <div class="tut-overlay-bubble" id="tut-overlay-bubble">
+    <div class="kicker" id="tut-overlay-kicker">Step 1 of 3</div>
+    <div class="title" id="tut-overlay-title">제목</div>
+    <div class="body" id="tut-overlay-body">설명</div>
+    <div class="tut-overlay-actions">
+      <div class="tut-overlay-step" id="tut-overlay-step">1 / 3</div>
+      <div class="tut-overlay-buttons">
+        <button class="tut-overlay-skip" onclick="skipOnboarding()">건너뛰기</button>
+        <button class="tut-overlay-next" id="tut-overlay-next" onclick="nextOnboarding()">다음</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="tut-coach">
+  <div class="tut-coach-head">
+    <span class="tut-coach-badge" id="tut-coach-badge">Tip</span>
+    <div class="tut-coach-title" id="tut-coach-title">제목</div>
+  </div>
+  <div class="tut-coach-body" id="tut-coach-body">본문</div>
+  <div class="tut-coach-foot">
+    <button class="tut-coach-ok" onclick="dismissCoach()">알겠어요</button>
   </div>
 </div>
 
@@ -954,6 +1087,273 @@ async function place(index){if(!gameActive||turnPhase!=='player'||pBoard[index])
 async function endGame(){gameActive=false;const ps=calcScore(pBoard),as_=calcScore(aBoard),durationMs=getElapsedDurationMs(),durationLabel=formatDuration(durationMs);let resultClass,message,result;if(ps>as_){resultClass='win';message='플레이어 승리!';result='win';history.w++;}else if(ps<as_){resultClass='lose';message='AI 승리';result='lose';history.l++;}else{resultClass='draw';message='무승부';result='draw';history.d++;}document.getElementById('card-area').style.display='none';document.getElementById('round-display').textContent='END';const saved=await saveGame(result);const resultArea=document.getElementById('result-area');resultArea.style.display='block';resultArea.innerHTML=`<div class="result-box ${resultClass}"><div class="result-msg">${message}</div><div class="result-detail">${playerName} ${ps} : ${as_} AI | ${durationLabel}</div><div class="result-saved" style="color:${saved?'var(--green)':'#ffd36d'}">${saved?'결과 저장 완료되었습니다.':'결과 저장에 실패했습니다.'}</div><button class="btn-retry" onclick="goMenu()">메뉴로</button><button class="btn-retry" onclick="openLeaderboardModal(playerId)" style="margin-left:8px">리더보드</button><button class="btn-retry" onclick="startGame()" style="margin-left:8px">다시 시작</button></div>`;renderPB();renderAB();updateRecord();if(saved){openLeaderboardModal(playerId);}}
 function goMenu(){document.getElementById('game').style.display='none';document.getElementById('menu').style.display='flex';updateRecord();}
 function updateRecord(){const total=history.w+history.l+history.d;if(total>0){document.getElementById('record').textContent=`전적: ${history.w}승 ${history.l}패 ${history.d}무`;}}
+
+const TUTORIAL_DECK=[15,8,22,15,3,27,12,19,6,24,11,16,4,29,17,9,20,13,7,25];
+const TUT_ONBOARDING=[
+  {targetId:'tut-current-card',kicker:'1 / 3',title:'현재 카드',body:'화면 가운데 숫자가 이번 턴에 배치할 카드입니다. 플레이어와 AI는 같은 카드를 동시에 받습니다.'},
+  {targetId:'tut-player-board',kicker:'2 / 3',title:'보드 위 20칸',body:'왼쪽에서 오른쪽으로 갈수록 숫자가 커지게 만드는 것이 목표입니다. 한 번 배치한 카드는 다시 뺄 수 없습니다.'},
+  {targetId:'tut-score-table',kicker:'3 / 3',title:'점수표',body:'연속된 오름차순 줄이 길수록 점수가 커집니다. 지금은 한 줄을 길게 만드는 감각을 익히는 연습입니다.'}
+];
+const TUT_TIPS={
+  CENTER:{id:'CENTER',badge:'코칭',title:'가운데 근처에 두면 시작이 편해집니다',body:'첫 카드는 보드 정중앙 근처에 두는 편이 좋습니다. 작은 수와 큰 수가 들어올 자리를 양쪽에 남겨둘 수 있기 때문입니다.'},
+  GAPS:{id:'GAPS',badge:'코칭',title:'초반에는 빈칸을 남겨두세요',body:'카드를 바로 옆 칸에 촘촘히 붙이면 중간 숫자가 들어올 자리가 사라집니다. 11~20대 숫자를 끼워 넣을 공간을 남겨두는 것이 안전합니다.'},
+  SAME:{id:'SAME',badge:'코칭',title:'같은 숫자도 흐름이 이어집니다',body:'11~20 숫자는 중복으로 들어 있습니다. 같은 숫자가 다시 나와도 오름차순 줄은 끊기지 않으니, 자연스럽게 같은 흐름 옆에 두어도 됩니다.'},
+  RANGE:{id:'RANGE',badge:'코칭',title:'왼쪽보다 커야 하고, 오른쪽보다 작아야 합니다',body:'이 칸이 안전하려면 왼쪽 기준값보다 커야 하고 오른쪽 기준값보다 작아야 합니다. 범위를 벗어나면 스트림이 즉시 끊어집니다.'}
+};
+let tutState={
+  active:false,ci:0,board:Array(20).fill(0),
+  onboardingIndex:0,onboardingDone:false,
+  triggered:new Set(),coachQueue:[],coachShowing:false,
+  lastWasNotPossible:false,lastTipKey:null
+};
+
+function startNewTutorial(){
+  tutState={
+    active:true,ci:0,board:Array(20).fill(0),
+    onboardingIndex:0,onboardingDone:false,
+    triggered:new Set(),coachQueue:[],coachShowing:false,
+    lastWasNotPossible:false,lastTipKey:null
+  };
+  document.getElementById('menu').style.display='none';
+  document.getElementById('survey').style.display='none';
+  document.getElementById('game').style.display='none';
+  document.getElementById('tutorial-game').style.display='flex';
+  document.getElementById('tut-card-area').style.display='flex';
+  document.getElementById('tut-score-demo').classList.remove('show');
+  const quitBtn=document.getElementById('tut-quit-btn');
+  if(quitBtn)quitBtn.classList.remove('complete');
+  renderTutCard();
+  renderTutBoard();
+  renderTutScoreTable();
+  document.getElementById('tut-round-display').textContent='1/20';
+  document.getElementById('tut-turn-msg').textContent='카드를 배치하세요';
+  setTimeout(()=>showOnboardingStep(0),220);
+}
+
+function quitTutorial(){
+  hideOverlay();
+  hideCoach();
+  document.getElementById('tutorial-game').style.display='none';
+  document.getElementById('menu').style.display='flex';
+  tutState.active=false;
+}
+
+function showOnboardingStep(index){
+  if(index>=TUT_ONBOARDING.length){finishOnboarding();return;}
+  tutState.onboardingIndex=index;
+  const step=TUT_ONBOARDING[index];
+  const target=document.getElementById(step.targetId);
+  if(!target){finishOnboarding();return;}
+  const rect=target.getBoundingClientRect();
+  const pad=10;
+  const hole={x:rect.left-pad,y:rect.top-pad,w:rect.width+pad*2,h:rect.height+pad*2};
+  const overlay=document.getElementById('tut-overlay');
+  overlay.style.display='block';
+  const svg=document.getElementById('tut-overlay-svg');
+  svg.setAttribute('viewBox',`0 0 ${window.innerWidth} ${window.innerHeight}`);
+  const holeEl=document.getElementById('tut-mask-hole');
+  holeEl.setAttribute('x',hole.x);
+  holeEl.setAttribute('y',hole.y);
+  holeEl.setAttribute('width',hole.w);
+  holeEl.setAttribute('height',hole.h);
+  document.getElementById('tut-overlay-kicker').textContent=step.kicker;
+  document.getElementById('tut-overlay-title').textContent=step.title;
+  document.getElementById('tut-overlay-body').textContent=step.body;
+  document.getElementById('tut-overlay-step').textContent=`${index+1} / ${TUT_ONBOARDING.length}`;
+  document.getElementById('tut-overlay-next').textContent=index===TUT_ONBOARDING.length-1?'시작하기':'다음';
+  const bubble=document.getElementById('tut-overlay-bubble');
+  bubble.style.visibility='hidden';
+  bubble.style.left='0px';
+  bubble.style.top='0px';
+  const bubbleRect=bubble.getBoundingClientRect();
+  const bw=bubbleRect.width,bh=bubbleRect.height;
+  let bx=hole.x+hole.w/2-bw/2;
+  let by=hole.y+hole.h+16;
+  if(by+bh>window.innerHeight-16)by=hole.y-bh-16;
+  if(by<16)by=Math.max(16,hole.y+hole.h+16);
+  bx=Math.max(16,Math.min(bx,window.innerWidth-bw-16));
+  bubble.style.left=bx+'px';
+  bubble.style.top=by+'px';
+  bubble.style.visibility='visible';
+}
+
+function nextOnboarding(){showOnboardingStep(tutState.onboardingIndex+1);}
+function skipOnboarding(){finishOnboarding();}
+function finishOnboarding(){
+  tutState.onboardingDone=true;
+  hideOverlay();
+  setTimeout(maybePreRoundCoach,300);
+}
+function hideOverlay(){document.getElementById('tut-overlay').style.display='none';}
+
+window.addEventListener('resize',()=>{
+  if(tutState.active && !tutState.onboardingDone){
+    showOnboardingStep(tutState.onboardingIndex);
+  }
+});
+
+function triggerCoach(tipKey){
+  if(tutState.triggered.has(tipKey))return;
+  tutState.triggered.add(tipKey);
+  tutState.coachQueue.push(TUT_TIPS[tipKey]);
+  tutState.lastTipKey=tipKey;
+  if(!tutState.coachShowing)showNextCoach();
+}
+function showNextCoach(){
+  const tip=tutState.coachQueue.shift();
+  if(!tip){tutState.coachShowing=false;return;}
+  tutState.coachShowing=true;
+  document.getElementById('tut-coach-badge').textContent=tip.badge;
+  document.getElementById('tut-coach-title').textContent=tip.title;
+  document.getElementById('tut-coach-body').textContent=tip.body;
+  document.getElementById('tut-coach').style.display='block';
+}
+function dismissCoach(){
+  const justClosed=tutState.lastTipKey;
+  hideCoach();
+  if(tutState.coachQueue.length>0){
+    setTimeout(showNextCoach,200);
+  }else if(justClosed==='RANGE'){
+    const msg=document.getElementById('tut-turn-msg');
+    if(msg)msg.textContent='다른 칸도 비교해보고 다시 골라보세요';
+    tutState.lastTipKey=null;
+  }else{
+    tutState.lastTipKey=null;
+  }
+}
+function hideCoach(){
+  document.getElementById('tut-coach').style.display='none';
+  tutState.coachShowing=false;
+}
+
+function renderTutCard(){
+  if(tutState.ci>=TUTORIAL_DECK.length){
+    document.getElementById('tut-current-card').innerHTML='';
+    document.getElementById('tut-turn-msg').textContent='모든 카드를 두었습니다.';
+    return;
+  }
+  const num=TUTORIAL_DECK[tutState.ci];
+  document.getElementById('tut-current-card').innerHTML=`<div class="number-card card-lg ${cc(num)} ${cg(num)}">${num}</div>`;
+}
+function renderTutBoard(){
+  let html='';
+  for(let i=0;i<20;i++){
+    if(tutState.board[i]){
+      html+=`<div class="slot slot-filled"><div class="number-card card-md ${cc(tutState.board[i])}">${tutState.board[i]}</div></div>`;
+    }else{
+      const clickable=tutState.ci<TUTORIAL_DECK.length?'clickable':'';
+      html+=`<div class="slot slot-empty ${clickable}" onclick="placeTut(${i})"><span class="slot-index">${i+1}</span></div>`;
+    }
+  }
+  document.getElementById('tut-player-board').innerHTML=html;
+}
+function renderTutScoreTable(){
+  let html='';
+  for(const [streak,points] of Object.entries(ST)){
+    const color=points>=100?'var(--gold)':points>=30?'var(--purple)':'var(--blue)';
+    html+=`<div class="score-table-item"><div class="streak">${streak}연속</div><div class="pts" style="color:${color}">${points}</div></div>`;
+  }
+  document.getElementById('tut-score-table').innerHTML=html;
+}
+
+function maybePreRoundCoach(){
+  if(!tutState.active || !tutState.onboardingDone || tutState.coachShowing)return;
+  const ci=tutState.ci;
+  if(ci>=TUTORIAL_DECK.length)return;
+  const num=TUTORIAL_DECK[ci];
+  if(ci===0 && !tutState.triggered.has('CENTER')){triggerCoach('CENTER');return;}
+  if(!tutState.triggered.has('SAME') && tutState.board.includes(num)){triggerCoach('SAME');return;}
+  if(!tutState.triggered.has('GAPS') && ci===2){
+    let maxRun=0,run=0;
+    for(let i=0;i<20;i++){
+      if(tutState.board[i]){run++;if(run>maxRun)maxRun=run;}
+      else run=0;
+    }
+    if(maxRun>=2){triggerCoach('GAPS');}
+  }
+}
+
+function placeTut(index){
+  if(!tutState.active || tutState.ci>=TUTORIAL_DECK.length || tutState.board[index])return;
+  if(!tutState.onboardingDone || tutState.coachShowing)return;
+  const num=TUTORIAL_DECK[tutState.ci];
+  let leftValue=0,rightValue=31;
+  for(let l=index-1;l>=0;l--){if(tutState.board[l]){leftValue=tutState.board[l];break;}}
+  for(let r=index+1;r<20;r++){if(tutState.board[r]){rightValue=tutState.board[r];break;}}
+  const breaksOrder=(leftValue>num)||(num>rightValue);
+  if(breaksOrder && !tutState.triggered.has('RANGE')){
+    triggerCoach('RANGE');
+    return;
+  }
+  tutState.board[index]=num;
+  tutState.ci++;
+  if(tutState.ci>=TUTORIAL_DECK.length){
+    document.getElementById('tut-round-display').textContent='END';
+    document.getElementById('tut-turn-msg').textContent='보드를 모두 채웠습니다.';
+    const quitBtn=document.getElementById('tut-quit-btn');
+    if(quitBtn)quitBtn.classList.add('complete');
+    renderTutBoard();
+    renderTutCard();
+    setTimeout(()=>showScoreDemo(),600);
+    return;
+  }
+  document.getElementById('tut-round-display').textContent=`${tutState.ci+1}/20`;
+  document.getElementById('tut-turn-msg').textContent='카드를 배치하세요';
+  renderTutCard();
+  renderTutBoard();
+  setTimeout(maybePreRoundCoach,250);
+}
+
+function computeSegments(board){
+  const segs=[];
+  let i=0;
+  while(i<board.length){
+    if(!board[i]){i++;continue;}
+    const start=i;
+    while(i+1<board.length && board[i+1] && board[i]<=board[i+1])i++;
+    const len=i-start+1;
+    segs.push({startIdx:start,endIdx:i,length:len,points:ST[len]||0,values:board.slice(start,i+1)});
+    i++;
+  }
+  return segs;
+}
+function showScoreDemo(){
+  document.getElementById('tut-card-area').style.display='none';
+  document.getElementById('tut-score-demo').classList.add('show');
+  const segs=computeSegments(tutState.board);
+  const boardEl=document.getElementById('tut-segments-board');
+  let html='<div class="tut-segments-inner">';
+  segs.forEach((seg,segIdx)=>{
+    const runClass=seg.length>=4?'run-long':seg.length>=2?'run-mid':'run-1';
+    const cards=seg.values.map(v=>`<div class="number-card card-md ${cc(v)}">${v}</div>`).join('');
+    html+=`<div class="tut-seg-wrap ${runClass}"><div class="tut-seg-points" id="seg-pts-${segIdx}">+${seg.points}</div>${cards}<div class="tut-seg-label">${seg.length}연속</div></div>`;
+  });
+  html+='</div>';
+  boardEl.innerHTML=html;
+  const formulaEl=document.getElementById('tut-score-formula');
+  const total=segs.reduce((sum,seg)=>sum+seg.points,0);
+  let formulaHtml='<div style="margin-bottom:8px;color:var(--dim);font-size:12px">구간별 점수</div>';
+  formulaHtml+=segs.map(seg=>`<span>${seg.length}연속 → <span class="seg-pts">${seg.points}</span>점</span>`).join('<span class="plus">+</span>');
+  formulaHtml+=`<hr><div class="tut-score-total"><span class="label">합계</span><span id="tut-total-score">0</span></div>`;
+  formulaEl.innerHTML=formulaHtml;
+  segs.forEach((seg,idx)=>{
+    setTimeout(()=>{
+      const el=document.getElementById(`seg-pts-${idx}`);
+      if(el)el.classList.add('show');
+    },400+idx*350);
+  });
+  setTimeout(()=>{
+    const totalEl=document.getElementById('tut-total-score');
+    if(!totalEl)return;
+    const dur=900,start=performance.now();
+    function tick(now){
+      const t=Math.min(1,(now-start)/dur);
+      totalEl.textContent=Math.round(total*t);
+      if(t<1)requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  },400+segs.length*350+200);
+}
 
 restoreSurveyDraft();
 document.getElementById('s-name').addEventListener('input', saveSurveyDraft);
