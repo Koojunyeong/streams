@@ -68,6 +68,9 @@
   .lose{background:rgba(166,46,46,.18);color:#ff8a8a}
   .draw{background:rgba(240,200,126,.18);color:#f5d58f}
   .mbti{background:rgba(126,200,240,.14);color:var(--blue)}
+  .mode-main{background:rgba(126,200,240,.14);color:var(--blue)}
+  .mode-tutorial{background:rgba(200,126,240,.14);color:#e3b3ff}
+  .duplicate-badge{background:rgba(240,200,126,.18);color:#f5d58f;margin-left:6px}
   .mini-board{display:flex;gap:2px;flex-wrap:wrap;max-width:260px}
   .cell{width:18px;height:20px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:800}
   .low{background:#17324f;color:#8fc9f0}
@@ -116,12 +119,17 @@
     <section class="panel">
       <h2>경기 기록</h2>
       <div class="controls">
-        <input id="search" class="input" type="search" placeholder="플레이어 이름, MBTI, 결과 검색">
+        <input id="search" class="input" type="search" placeholder="플레이어, MBTI, ID, 장르, 모드 검색">
         <select id="result-filter" class="select">
           <option value="">전체 결과</option>
           <option value="win">승리</option>
           <option value="lose">패배</option>
           <option value="draw">무승부</option>
+        </select>
+        <select id="game-mode-filter" class="select">
+          <option value="">전체 유형</option>
+          <option value="main">본게임</option>
+          <option value="tutorial">튜토리얼</option>
         </select>
         <button class="btn" onclick="applyFilters()">필터 적용</button>
       </div>
@@ -131,6 +139,7 @@
             <tr>
               <th>ID</th>
               <th>Player</th>
+              <th>Mode</th>
               <th>Phone</th>
               <th>MBTI</th>
               <th>Played At</th>
@@ -142,7 +151,7 @@
             </tr>
           </thead>
           <tbody id="table-body">
-            <tr><td colspan="10" class="empty">불러오는 중...</td></tr>
+            <tr><td colspan="11" class="empty">불러오는 중...</td></tr>
           </tbody>
         </table>
       </div>
@@ -164,9 +173,11 @@
 </div>
 
 <script>
+const PAGE_SIZE = 20;
 let currentPage = 1;
 let cachedGames = [];
 let cachedTotal = 0;
+let currentFilters = { q:'', result:'', game_mode:'' };
 
 function fmtTime(t){
   if(!t) return '-';
@@ -194,6 +205,12 @@ function resultBadge(result){
 
 function mbtiBadge(mbti){
   return mbti ? `<span class="badge mbti">${mbti}</span>` : '<span class="muted">-</span>';
+}
+
+function modeBadge(mode){
+  const normalized = String(mode || 'main').toLowerCase() === 'tutorial' ? 'tutorial' : 'main';
+  const label = normalized === 'tutorial' ? 'TUTORIAL' : 'MAIN';
+  return `<span class="badge mode-${normalized}">${label}</span>`;
 }
 
 function formatPhone(phone){
@@ -245,38 +262,17 @@ function renderStats(d){
 
 function renderTable(page){
   currentPage = page;
-  const search = document.getElementById('search').value.trim().toLowerCase();
-  const resultFilter = document.getElementById('result-filter').value;
-
-  let rows = cachedGames.slice();
-  if(search){
-    rows = rows.filter(g => {
-      const hay = [
-        g.player_name,
-        g.phone_number,
-        g.mbti,
-        g.age,
-        g.gender,
-        g.playtime,
-        formatDuration(g.duration_ms),
-        g.survey_genres,
-        g.result
-      ].join(' ').toLowerCase();
-      return hay.includes(search);
-    });
-  }
-  if(resultFilter){
-    rows = rows.filter(g => g.result === resultFilter);
-  }
+  const rows = cachedGames.slice();
 
   const tb = document.getElementById('table-body');
   if(!rows.length){
-    tb.innerHTML = '<tr><td colspan="10" class="empty">표시할 기록이 없습니다.</td></tr>';
+    tb.innerHTML = '<tr><td colspan="11" class="empty">표시할 기록이 없습니다.</td></tr>';
   }else{
     tb.innerHTML = rows.map(g => `
       <tr>
         <td class="mono">${g.id}</td>
         <td>${g.player_name || 'Anonymous'}</td>
+        <td>${modeBadge(g.game_mode)}</td>
         <td class="mono">${formatPhone(g.phone_number)}</td>
         <td>${mbtiBadge(g.mbti)}</td>
         <td class="mono muted">${fmtTime(g.played_at)}</td>
@@ -289,7 +285,7 @@ function renderTable(page){
     `).join('');
   }
 
-  const pages = Math.max(1, Math.ceil(cachedTotal / 20));
+  const pages = Math.max(1, Math.ceil(cachedTotal / PAGE_SIZE));
   let html = '';
   for(let i=1;i<=pages;i++){
     html += `<button class="page-btn ${i===page ? 'active' : ''}" onclick="loadRecords(${i})">${i}</button>`;
@@ -300,30 +296,46 @@ function renderTable(page){
 async function loadRecords(page){
   currentPage = page;
   try{
-    const r = await fetch(`/api/records?page=${page}&per_page=20`);
+    const params = new URLSearchParams({page: String(page), per_page: String(PAGE_SIZE)});
+    if(currentFilters.q) params.set('q', currentFilters.q);
+    if(currentFilters.result) params.set('result', currentFilters.result);
+    if(currentFilters.game_mode) params.set('game_mode', currentFilters.game_mode);
+    const r = await fetch(`/api/records?${params.toString()}`);
     const d = await r.json();
     cachedGames = d.games || [];
     cachedTotal = d.total || 0;
     renderStats(d);
     renderTable(page);
   }catch(e){
-    document.getElementById('table-body').innerHTML = '<tr><td colspan="10" class="empty">기록을 불러오지 못했습니다.</td></tr>';
+    document.getElementById('table-body').innerHTML = '<tr><td colspan="11" class="empty">기록을 불러오지 못했습니다.</td></tr>';
   }
 }
 
 function applyFilters(){
-  renderTable(currentPage);
+  currentFilters = {
+    q: document.getElementById('search').value.trim(),
+    result: document.getElementById('result-filter').value,
+    game_mode: document.getElementById('game-mode-filter').value,
+  };
+  loadRecords(1);
 }
 
 async function showDetail(gid){
   try{
-    const [recordsRes, turnsRes] = await Promise.all([
-      fetch('/api/records?page=1&per_page=999'),
+    const [recordRes, turnsRes] = await Promise.all([
+      fetch(`/api/records/${gid}`),
       fetch(`/api/records/${gid}/turns`)
     ]);
-    const recordsData = await recordsRes.json();
+    const recordData = await recordRes.json();
     const turnsData = await turnsRes.json();
-    const game = (recordsData.games || []).find(x => x.id === gid);
+    const game = recordData.game;
+    const turns = turnsData.turns || [];
+    const duplicateCounts = {};
+    turns.forEach(t => {
+      const key = Number(t.card_value);
+      duplicateCounts[key] = (duplicateCounts[key] || 0) + 1;
+    });
+    const duplicateSeen = {};
 
     let html = `
       <div class="modal-head">
@@ -344,12 +356,14 @@ async function showDetail(gid){
       }
       html += `
         <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+          <span class="chip">Mode <b>${String(game.game_mode || 'main').toUpperCase()}</b></span>
           ${game.phone_number ? `<span class="chip">Phone <b>${formatPhone(game.phone_number)}</b></span>` : ''}
           ${game.age ? `<span class="chip">Age <b>${game.age}</b></span>` : ''}
           ${game.gender ? `<span class="chip">Gender <b>${game.gender}</b></span>` : ''}
           ${game.mbti ? `<span class="chip">MBTI <b>${game.mbti}</b></span>` : ''}
           ${game.playtime ? `<span class="chip">Playtime <b>${game.playtime}</b></span>` : ''}
           <span class="chip">Duration <b>${formatDuration(game.duration_ms)}</b></span>
+          <span class="chip">Turn Count <b>${game.turn_count || turns.length || 0}</b></span>
         </div>
         ${turnSequence.length ? `<div style="margin-bottom:14px"><div class="muted" style="margin-bottom:6px">Card Sequence</div>${turnSequence.map((v,i)=>`<span class="badge mbti" style="margin-right:6px">${i+1}:${v}</span>`).join(' ')}</div>` : ''}
         ${game.survey_genres ? `<div style="margin-bottom:14px" class="muted">Genres: ${(() => {
@@ -367,7 +381,6 @@ async function showDetail(gid){
       `;
     }
 
-    const turns = turnsData.turns || [];
     if(turns.length){
       html += `
         <div class="card" style="padding:0;overflow:hidden">
@@ -381,7 +394,13 @@ async function showDetail(gid){
               ${turns.map(t => `
                 <tr>
                   <td class="mono">${t.turn_number}</td>
-                  <td class="mono" style="font-weight:800">${t.card_value}</td>
+                  <td class="mono" style="font-weight:800">${(() => {
+                    const cardKey = Number(t.card_value);
+                    const totalDup = duplicateCounts[cardKey] || 0;
+                    if(totalDup <= 1) return t.card_value;
+                    duplicateSeen[cardKey] = (duplicateSeen[cardKey] || 0) + 1;
+                    return `${t.card_value} <span class="badge duplicate-badge">duplicate ${duplicateSeen[cardKey]}/${totalDup}</span>`;
+                  })()}</td>
                   <td class="mono">${t.card_order ?? t.turn_number}</td>
                   <td class="mono">${t.deck_index ?? (t.turn_number - 1)}</td>
                   <td class="mono">${t.player_slot + 1}</td>
@@ -449,13 +468,23 @@ async function loadAnalysis(){
 }
 
 function loadAll(){
+  currentFilters = {
+    q: document.getElementById('search').value.trim(),
+    result: document.getElementById('result-filter').value,
+    game_mode: document.getElementById('game-mode-filter').value,
+  };
   loadRecords(1);
   loadAnalysis();
   fetchHealth();
 }
 
-document.getElementById('search').addEventListener('input', applyFilters);
+document.getElementById('search').addEventListener('keydown', (event) => {
+  if(event.key === 'Enter'){
+    applyFilters();
+  }
+});
 document.getElementById('result-filter').addEventListener('change', applyFilters);
+document.getElementById('game-mode-filter').addEventListener('change', applyFilters);
 
 loadAll();
 </script>

@@ -7,3 +7,4 @@ venv/
 game_records.db
 .vercel/
 supabase/.temp/
+streams_data_analysis/output/

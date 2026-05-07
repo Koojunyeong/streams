@@ -679,7 +679,7 @@ async function createGameSession(){
   }
   return data;
 }
-async function saveGame(result){const scores=updateScores();try{const res=await fetch('/api/save_game',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({player_id:playerId,player_token:playerToken,game_token:gameToken,player_name:playerName,deck,player_board:pBoard,ai_board:aBoard,player_score:scores.ps,ai_score:scores.as_,duration_ms:getElapsedDurationMs(),result,turns:turnLog})});return res.ok;}catch(e){return false;}}
+async function saveGame(result){const scores=updateScores();try{const res=await fetch('/api/save_game',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({player_id:playerId,player_token:playerToken,game_token:gameToken,player_name:playerName,game_mode:'main',deck,player_board:pBoard,ai_board:aBoard,player_score:scores.ps,ai_score:scores.as_,duration_ms:getElapsedDurationMs(),result,turns:turnLog})});return res.ok;}catch(e){return false;}}
 function leaderboardTabsMarkup(){return `<div class="leaderboard-tabs">${Object.entries(PERIOD_LABELS).map(([period,label])=>`<button class="leaderboard-tab ${leaderboardState.period===period?'active':''}" onclick="setLeaderboardPeriod('${period}')">${label}</button>`).join('')}</div>`;}
 function leaderboardRowsMarkup(rows){
   if(!rows||!rows.length){

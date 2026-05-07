@@ -502,6 +502,152 @@ def fetch_all_rows(table, columns="*", chunk_size=1000, order_by=None, desc=Fals
     return rows
 
 
+def coerce_game_mode(value):
+    return "tutorial" if str(value or "").strip().lower() == "tutorial" else "main"
+
+
+def normalize_game_mode_filter(value):
+    text = str(value or "").strip().lower()
+    return text if text in {"main", "tutorial"} else ""
+
+
+def fetch_players_map(player_ids):
+    player_ids = sorted({normalize_id(pid) for pid in player_ids if pid is not None})
+    if not player_ids:
+        return {}
+    players_resp = (
+        sb()
+        .table("players")
+        .select("id, phone_number, age, gender, mbti, playtime, genres")
+        .in_("id", player_ids)
+        .execute()
+    )
+    return {normalize_id(row["id"]): row for row in resp_data(players_resp)}
+
+
+def fetch_turns_map(game_ids):
+    game_ids = sorted({normalize_id(gid) for gid in game_ids if gid is not None})
+    if not game_ids:
+        return {}
+    turns_resp = sb().table("turns").select("*").in_("game_id", game_ids).execute()
+    grouped = {}
+    ordered_turns = sorted(
+        resp_data(turns_resp),
+        key=lambda row: (
+            normalize_id(row.get("game_id")) or 0,
+            int(row.get("turn_number") or 0),
+            int(row.get("deck_index") or 0),
+        ),
+    )
+    for row in ordered_turns:
+        grouped.setdefault(normalize_id(row.get("game_id")), []).append(row)
+    return grouped
+
+
+def turn_rows_to_export_payload(turn_rows):
+    ordered_rows = sorted(
+        turn_rows,
+        key=lambda row: (int(row.get("turn_number") or 0), int(row.get("deck_index") or 0)),
+    )
+    detail_rows = [
+        {
+            "turn": int(row.get("turn_number") or 0),
+            "card": int(row.get("card_value") or 0),
+            "card_order": int(row.get("card_order") or row.get("turn_number") or 0),
+            "deck_index": int(row.get("deck_index") or 0),
+            "player_slot": int(row.get("player_slot") or 0),
+            "ai_slot": int(row.get("ai_slot") or 0),
+            "player_score_after": int(row.get("player_score_after") or 0),
+            "ai_score_after": int(row.get("ai_score_after") or 0),
+        }
+        for row in ordered_rows
+    ]
+    return {
+        "turn_count": len(detail_rows),
+        "turn_cards": [row["card"] for row in detail_rows],
+        "turn_player_slots": [row["player_slot"] for row in detail_rows],
+        "turn_ai_slots": [row["ai_slot"] for row in detail_rows],
+        "turn_player_scores": [row["player_score_after"] for row in detail_rows],
+        "turn_ai_scores": [row["ai_score_after"] for row in detail_rows],
+        "turn_detail_rows": detail_rows,
+        "turn_detail": json.dumps(detail_rows, ensure_ascii=False),
+    }
+
+
+def enrich_game_row(game_row, player_row=None, turn_rows=None):
+    merged = dict(game_row)
+    player_row = player_row or {}
+    merged["game_mode"] = coerce_game_mode(game_row.get("game_mode"))
+    merged["age"] = player_row.get("age", "")
+    merged["gender"] = player_row.get("gender", "")
+    merged["mbti"] = player_row.get("mbti", "")
+    merged["playtime"] = player_row.get("playtime", "")
+    merged["phone_number"] = player_row.get("phone_number", "")
+    genres = player_row.get("genres", [])
+    if not isinstance(genres, list):
+        genres = []
+    merged["survey_genres_list"] = genres
+    merged["survey_genres"] = json.dumps(genres, ensure_ascii=False)
+    merged["deck"] = json.dumps(game_row.get("deck", []), ensure_ascii=False)
+    merged["turn_sequence"] = json.dumps(game_row.get("turn_sequence", []), ensure_ascii=False)
+    merged["player_board"] = json.dumps(game_row.get("player_board", []), ensure_ascii=False)
+    merged["ai_board"] = json.dumps(game_row.get("ai_board", []), ensure_ascii=False)
+    turn_payload = turn_rows_to_export_payload(turn_rows or [])
+    merged.update(turn_payload)
+    return merged
+
+
+def build_record_search_text(record):
+    searchable = [
+        record.get("id"),
+        record.get("player_name"),
+        record.get("phone_number"),
+        record.get("age"),
+        record.get("gender"),
+        record.get("mbti"),
+        record.get("playtime"),
+        record.get("result"),
+        record.get("game_mode"),
+        " ".join(record.get("survey_genres_list", [])),
+    ]
+    return " ".join(str(item or "") for item in searchable).lower()
+
+
+def filter_record_rows(records, search_text="", result_filter="", game_mode_filter=""):
+    search_text = str(search_text or "").strip().lower()
+    result_filter = str(result_filter or "").strip().lower()
+    game_mode_filter = normalize_game_mode_filter(game_mode_filter)
+    filtered = []
+    for record in records:
+        if result_filter and str(record.get("result") or "").lower() != result_filter:
+            continue
+        if game_mode_filter and coerce_game_mode(record.get("game_mode")) != game_mode_filter:
+            continue
+        if search_text and search_text not in build_record_search_text(record):
+            continue
+        filtered.append(record)
+    return filtered
+
+
+def summarize_record_rows(records):
+    stats = {}
+    total_player_score = 0.0
+    total_ai_score = 0.0
+    for row in records:
+        result = row.get("result", "")
+        stats[result] = stats.get(result, 0) + 1
+        total_player_score += float(row.get("player_score") or 0)
+        total_ai_score += float(row.get("ai_score") or 0)
+    count = len(records)
+    return {
+        "stats": stats,
+        "averages": {
+            "avg_p": total_player_score / count if count else None,
+            "avg_a": total_ai_score / count if count else None,
+        },
+    }
+
+
 def init_schema_check():
     if not SUPABASE_AVAILABLE:
         return
@@ -771,6 +917,7 @@ def save_game():
         game_payload = {
             "player_id": player_id,
             "player_name": d.get("player_name", "Anonymous"),
+            "game_mode": coerce_game_mode(d.get("game_mode")),
             "deck": deck,
             "player_board": player_board,
             "ai_board": ai_board,
@@ -783,7 +930,7 @@ def save_game():
         try:
             game_resp = sb().table("games").insert(game_payload).execute()
         except Exception:
-            legacy_game_payload = {k: v for k, v in game_payload.items() if k not in ("turn_sequence", "duration_ms")}
+            legacy_game_payload = {k: v for k, v in game_payload.items() if k not in ("turn_sequence", "duration_ms", "game_mode")}
             game_resp = sb().table("games").insert(legacy_game_payload).execute()
         game_rows = resp_data(game_resp)
         if not game_rows:
@@ -826,60 +973,56 @@ def get_records():
         return err
 
     try:
-        page = int(request.args.get("page", 1))
-        pp = int(request.args.get("per_page", 50))
+        page = max(1, int(request.args.get("page", 1)))
+        pp = max(1, min(200, int(request.args.get("per_page", 50))))
         offset = (page - 1) * pp
+        search_text = request.args.get("q", "")
+        result_filter = request.args.get("result", "")
+        game_mode_filter = request.args.get("game_mode", "")
 
-        count_resp = sb().table("games").select("id", count="exact").range(0, 0).execute()
-        total = resp_count(count_resp) or 0
-
-        games_resp = sb().table("games").select("*").order("played_at", desc=True).range(offset, offset + pp - 1).execute()
-        games = resp_data(games_resp)
-
-        player_ids = sorted({normalize_id(g["player_id"]) for g in games if g.get("player_id") is not None})
-        players_map = {}
-        if player_ids:
-            players_resp = sb().table("players").select("id, phone_number, age, gender, mbti, playtime, genres").in_("id", player_ids).execute()
-            players_map = {normalize_id(row["id"]): row for row in resp_data(players_resp)}
-
-        merged_games = []
-        for g in games:
-            p = players_map.get(normalize_id(g.get("player_id")), {})
-            merged = dict(g)
-            merged["age"] = p.get("age", "")
-            merged["gender"] = p.get("gender", "")
-            merged["mbti"] = p.get("mbti", "")
-            merged["playtime"] = p.get("playtime", "")
-            merged["phone_number"] = p.get("phone_number", "")
-            merged["survey_genres"] = json.dumps(p.get("genres", []))
-            merged["deck"] = json.dumps(merged.get("deck", []))
-            merged["turn_sequence"] = json.dumps(merged.get("turn_sequence", []))
-            merged["player_board"] = json.dumps(merged.get("player_board", []))
-            merged["ai_board"] = json.dumps(merged.get("ai_board", []))
-            merged_games.append(merged)
-
-        all_games = fetch_all_rows("games", columns="result,player_score,ai_score", order_by="played_at", desc=True)
-        stats = {}
-        total_player_score = 0.0
-        total_ai_score = 0.0
-        for row in all_games:
-            result = row.get("result", "")
-            stats[result] = stats.get(result, 0) + 1
-            total_player_score += float(row.get("player_score") or 0)
-            total_ai_score += float(row.get("ai_score") or 0)
-
-        avg_p = total_player_score / len(all_games) if all_games else None
-        avg_a = total_ai_score / len(all_games) if all_games else None
+        games = fetch_all_rows("games", columns="*", order_by="played_at", desc=True)
+        players_map = fetch_players_map([g.get("player_id") for g in games])
+        merged_games = [enrich_game_row(g, players_map.get(normalize_id(g.get("player_id")), {})) for g in games]
+        filtered_games = filter_record_rows(
+            merged_games,
+            search_text=search_text,
+            result_filter=result_filter,
+            game_mode_filter=game_mode_filter,
+        )
+        total = len(filtered_games)
+        summary = summarize_record_rows(filtered_games)
+        page_games = filtered_games[offset : offset + pp]
 
         return jsonify(
             {
-                "games": merged_games,
+                "games": page_games,
                 "total": total,
                 "page": page,
-                "stats": stats,
-                "averages": {"avg_p": avg_p, "avg_a": avg_a},
+                "per_page": pp,
+                "stats": summary["stats"],
+                "averages": summary["averages"],
             }
         )
+    except Exception as exc:
+        return jsonify({"status": "error", "message": str(exc)}), 500
+
+
+@app.route("/api/records/<int:gid>")
+def get_record(gid):
+    err = require_supabase()
+    if err:
+        return err
+
+    try:
+        game_resp = sb().table("games").select("*").eq("id", gid).limit(1).execute()
+        game_rows = resp_data(game_resp)
+        if not game_rows:
+            return jsonify({"status": "error", "message": "Record not found"}), 404
+
+        game = game_rows[0]
+        player_id = normalize_id(game.get("player_id"))
+        players_map = fetch_players_map([player_id])
+        return jsonify({"game": enrich_game_row(game, players_map.get(player_id, {}))})
     except Exception as exc:
         return jsonify({"status": "error", "message": str(exc)}), 500
 
@@ -905,12 +1048,9 @@ def download_csv():
         return err
 
     try:
-        games = fetch_all_rows("games", columns="*")
-        player_ids = sorted({normalize_id(g["player_id"]) for g in games if g.get("player_id") is not None})
-        players_map = {}
-        if player_ids:
-            players_resp = sb().table("players").select("id, phone_number, age, gender, mbti, playtime, genres").in_("id", player_ids).execute()
-            players_map = {normalize_id(row["id"]): row for row in resp_data(players_resp)}
+        games = fetch_all_rows("games", columns="*", order_by="played_at", desc=True)
+        players_map = fetch_players_map([g.get("player_id") for g in games])
+        turns_map = fetch_turns_map([g.get("id") for g in games])
 
         out = io.StringIO()
         w = csv.writer(out)
@@ -925,9 +1065,17 @@ def download_csv():
                 "Playtime",
                 "Genres",
                 "Played At",
+                "Game Mode",
                 "Duration (ms)",
                 "Deck",
                 "Turn Sequence",
+                "Turn Count",
+                "Turn Cards",
+                "Turn Player Slots",
+                "Turn AI Slots",
+                "Turn Player Scores",
+                "Turn AI Scores",
+                "Turn Detail",
                 "Player Board",
                 "AI Board",
                 "Player Score",
@@ -936,26 +1084,38 @@ def download_csv():
             ]
         )
         for g in games:
-            p = players_map.get(normalize_id(g.get("player_id")), {})
+            merged = enrich_game_row(
+                g,
+                players_map.get(normalize_id(g.get("player_id")), {}),
+                turns_map.get(normalize_id(g.get("id")), []),
+            )
             w.writerow(
                 [
-                    g.get("id"),
-                    g.get("player_name", "Anonymous"),
-                    p.get("phone_number", ""),
-                    p.get("age", ""),
-                    p.get("gender", ""),
-                    p.get("mbti", ""),
-                    p.get("playtime", ""),
-                    json.dumps(p.get("genres", [])),
-                    g.get("played_at"),
-                    g.get("duration_ms", 0),
-                    json.dumps(g.get("deck", [])),
-                    json.dumps(g.get("turn_sequence", [])),
-                    json.dumps(g.get("player_board", [])),
-                    json.dumps(g.get("ai_board", [])),
-                    g.get("player_score"),
-                    g.get("ai_score"),
-                    g.get("result"),
+                    merged.get("id"),
+                    merged.get("player_name", "Anonymous"),
+                    merged.get("phone_number", ""),
+                    merged.get("age", ""),
+                    merged.get("gender", ""),
+                    merged.get("mbti", ""),
+                    merged.get("playtime", ""),
+                    merged.get("survey_genres", "[]"),
+                    merged.get("played_at"),
+                    merged.get("game_mode", "main"),
+                    merged.get("duration_ms", 0),
+                    merged.get("deck", "[]"),
+                    merged.get("turn_sequence", "[]"),
+                    merged.get("turn_count", 0),
+                    json.dumps(merged.get("turn_cards", []), ensure_ascii=False),
+                    json.dumps(merged.get("turn_player_slots", []), ensure_ascii=False),
+                    json.dumps(merged.get("turn_ai_slots", []), ensure_ascii=False),
+                    json.dumps(merged.get("turn_player_scores", []), ensure_ascii=False),
+                    json.dumps(merged.get("turn_ai_scores", []), ensure_ascii=False),
+                    merged.get("turn_detail", "[]"),
+                    merged.get("player_board", "[]"),
+                    merged.get("ai_board", "[]"),
+                    merged.get("player_score"),
+                    merged.get("ai_score"),
+                    merged.get("result"),
                 ]
             )
 
@@ -979,12 +1139,12 @@ def survey_stats():
         return err
 
     try:
-        games = fetch_all_rows("games", columns="player_id,player_score,ai_score,result")
-        player_ids = sorted({normalize_id(g["player_id"]) for g in games if g.get("player_id") is not None})
-        players_map = {}
-        if player_ids:
-            players_resp = sb().table("players").select("id, age, gender, mbti, playtime").in_("id", player_ids).execute()
-            players_map = {normalize_id(row["id"]): row for row in resp_data(players_resp)}
+        games = [
+            row
+            for row in fetch_all_rows("games", columns="*", order_by="played_at", desc=True)
+            if coerce_game_mode(row.get("game_mode")) == "main"
+        ]
+        players_map = fetch_players_map([g.get("player_id") for g in games])
 
         def bucket_stats(key_name):
             grouped = {}
@@ -1035,7 +1195,11 @@ def leaderboard():
     try:
         target_player_id = request.args.get("player_id")
         player_rows = fetch_all_rows("players", columns="id,player_name,phone_number")
-        game_rows = fetch_all_rows("games", columns="player_id,player_name,player_score,duration_ms,played_at")
+        game_rows = [
+            row
+            for row in fetch_all_rows("games", columns="*", order_by="played_at", desc=True)
+            if coerce_game_mode(row.get("game_mode")) == "main"
+        ]
         return jsonify(build_leaderboards(player_rows, game_rows, target_player_id=target_player_id))
     except Exception as exc:
         return jsonify({"status": "error", "message": str(exc)}), 500
