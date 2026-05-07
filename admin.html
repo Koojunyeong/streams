@@ -49,6 +49,7 @@
   .panel{background:linear-gradient(180deg,var(--panel),var(--panel-2));border:1px solid var(--line);border-radius:18px;padding:16px;overflow:hidden}
   .panel h2{margin:0 0 12px;font-size:16px}
   .controls{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+  .controls-note{margin:-4px 0 14px;color:var(--muted);font-size:12px}
   .input, .select{
     background:#0a1020;border:1px solid var(--line);color:var(--text);border-radius:10px;
     padding:10px 12px;font-size:13px;outline:none
@@ -119,7 +120,7 @@
     <section class="panel">
       <h2>경기 기록</h2>
       <div class="controls">
-        <input id="search" class="input" type="search" placeholder="플레이어, MBTI, ID, 장르, 모드 검색">
+        <input id="search" class="input" type="search" placeholder="전체 기록에서 플레이어, MBTI, ID, 장르, 모드 검색">
         <select id="result-filter" class="select">
           <option value="">전체 결과</option>
           <option value="win">승리</option>
@@ -133,6 +134,7 @@
         </select>
         <button class="btn" onclick="applyFilters()">필터 적용</button>
       </div>
+      <div class="controls-note">검색은 현재 페이지가 아니라 전체 경기 기록을 기준으로 서버에서 다시 조회합니다.</div>
       <div class="table-wrap">
         <table>
           <thead>
@@ -178,6 +180,7 @@ let currentPage = 1;
 let cachedGames = [];
 let cachedTotal = 0;
 let currentFilters = { q:'', result:'', game_mode:'' };
+let searchDebounceTimer = null;
 
 function fmtTime(t){
   if(!t) return '-';
@@ -482,6 +485,10 @@ document.getElementById('search').addEventListener('keydown', (event) => {
   if(event.key === 'Enter'){
     applyFilters();
   }
+});
+document.getElementById('search').addEventListener('input', () => {
+  clearTimeout(searchDebounceTimer);
+  searchDebounceTimer = setTimeout(() => applyFilters(), 250);
 });
 document.getElementById('result-filter').addEventListener('change', applyFilters);
 document.getElementById('game-mode-filter').addEventListener('change', applyFilters);
