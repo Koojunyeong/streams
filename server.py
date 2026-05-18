@@ -81,6 +81,9 @@ print(f"[Server Device] {DEVICE}")
 KST = ZoneInfo("Asia/Seoul")
 PERIOD_LABELS = {"daily": "24 Hours", "weekly": "7 Days", "overall": "Overall"}
 TOKEN_MAX_AGE_SECONDS = 6 * 60 * 60
+LEGACY_AI_MODEL_LABEL = "legacy-dqn"
+CURRENT_AI_MODEL_LABEL = "v16-double-dueling-dqn"
+FALLBACK_AI_MODEL_LABEL = "fallback-rules"
 STREAMS_TOKEN_SECRET = (
     os.environ.get("STREAMS_TOKEN_SECRET")
     or os.environ.get("VERCEL_OIDC_TOKEN")
@@ -578,6 +581,7 @@ def enrich_game_row(game_row, player_row=None, turn_rows=None):
     merged = dict(game_row)
     player_row = player_row or {}
     merged["game_mode"] = coerce_game_mode(game_row.get("game_mode"))
+    merged["ai_model_label"] = str(game_row.get("ai_model_label") or LEGACY_AI_MODEL_LABEL)
     merged["age"] = player_row.get("age", "")
     merged["gender"] = player_row.get("gender", "")
     merged["mbti"] = player_row.get("mbti", "")
@@ -608,6 +612,7 @@ def build_record_search_text(record):
         record.get("playtime"),
         record.get("result"),
         record.get("game_mode"),
+        record.get("ai_model_label"),
         " ".join(record.get("survey_genres_list", [])),
     ]
     return " ".join(str(item or "") for item in searchable).lower()
@@ -672,8 +677,9 @@ if TORCH_AVAILABLE:
                 nn.Conv1d(32, 64, kernel_size=3, padding=1),
                 nn.ReLU(),
             )
+            tail_feature_size = max(0, int(state_size) - 40)
             self.feature = nn.Sequential(
-                nn.Linear(64 * 20 + 51, 512),
+                nn.Linear(64 * 20 + tail_feature_size, 512),
                 nn.ReLU(),
                 nn.Linear(512, 256),
                 nn.ReLU(),
@@ -700,6 +706,8 @@ for i in range(21, 31):
     NUMBER_POOL.append(i)
 
 TOTAL_COUNTS = {x: NUMBER_POOL.count(x) for x in range(1, 31)}
+MODEL_STATE_SIZE = 96
+RESERVED_STATE_FEATURES = 5
 
 
 def get_prob_mask(board, num, deck, ci):
@@ -747,13 +755,24 @@ def build_state(board, num, deck, ci):
         drawn[c] = drawn.get(c, 0) + 1
     rv = [max(0, TOTAL_COUNTS.get(n, 0) - drawn.get(n, 0)) / 2.0 for n in range(1, 31)]
     lm = get_prob_mask(board, num, deck, ci) if num > 0 else np.zeros(20)
-    return np.concatenate([np.array(bn), np.array(bo), np.array([num / 30.0]), np.array(rv), lm])
+    reserved = np.zeros(RESERVED_STATE_FEATURES, dtype=np.float32)
+    return np.concatenate(
+        [
+            np.array(bn),
+            np.array(bo),
+            np.array([num / 30.0]),
+            np.array(rv),
+            lm,
+            reserved,
+        ]
+    )
 
 
 model = None
 loaded = False
+active_ai_model_label = FALLBACK_AI_MODEL_LABEL
 if TORCH_AVAILABLE:
-    model = DuelingQNetwork(91, 20).to(DEVICE)
+    model = DuelingQNetwork(MODEL_STATE_SIZE, 20).to(DEVICE)
     for name in ["best_model.pth", "final_model.pth"]:
         model_path = os.path.join(BASE_DIR, name)
         if os.path.exists(model_path):
@@ -761,6 +780,7 @@ if TORCH_AVAILABLE:
                 model.load_state_dict(torch.load(model_path, map_location=DEVICE))
                 model.eval()
                 loaded = True
+                active_ai_model_label = CURRENT_AI_MODEL_LABEL
                 print(f"[Model] {name}")
                 break
             except Exception as exc:
@@ -795,6 +815,7 @@ def health():
             "model_loaded": loaded,
             "ai_ready": True,
             "ai_mode": "torch" if loaded else "fallback",
+            "ai_model_label": active_ai_model_label,
             "device": str(DEVICE),
             "supabase_ready": SUPABASE_AVAILABLE,
         }
@@ -918,6 +939,7 @@ def save_game():
             "player_id": player_id,
             "player_name": d.get("player_name", "Anonymous"),
             "game_mode": coerce_game_mode(d.get("game_mode")),
+            "ai_model_label": active_ai_model_label,
             "deck": deck,
             "player_board": player_board,
             "ai_board": ai_board,
@@ -930,7 +952,11 @@ def save_game():
         try:
             game_resp = sb().table("games").insert(game_payload).execute()
         except Exception:
-            legacy_game_payload = {k: v for k, v in game_payload.items() if k not in ("turn_sequence", "duration_ms", "game_mode")}
+            legacy_game_payload = {
+                k: v
+                for k, v in game_payload.items()
+                if k not in ("turn_sequence", "duration_ms", "game_mode", "ai_model_label")
+            }
             game_resp = sb().table("games").insert(legacy_game_payload).execute()
         game_rows = resp_data(game_resp)
         if not game_rows:
@@ -1066,6 +1092,7 @@ def download_csv():
                 "Genres",
                 "Played At",
                 "Game Mode",
+                "AI Model Label",
                 "Duration (ms)",
                 "Deck",
                 "Turn Sequence",
@@ -1101,6 +1128,7 @@ def download_csv():
                     merged.get("survey_genres", "[]"),
                     merged.get("played_at"),
                     merged.get("game_mode", "main"),
+                    merged.get("ai_model_label", LEGACY_AI_MODEL_LABEL),
                     merged.get("duration_ms", 0),
                     merged.get("deck", "[]"),
                     merged.get("turn_sequence", "[]"),

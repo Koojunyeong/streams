@@ -15,6 +15,7 @@ create table if not exists public.games (
   player_id bigint references public.players(id) on delete set null,
   player_name text not null default 'Anonymous',
   game_mode text not null default 'main',
+  ai_model_label text not null default 'legacy-dqn',
   played_at timestamptz not null default now(),
   deck jsonb not null,
   turn_sequence jsonb not null default '[]'::jsonb,
@@ -41,6 +42,13 @@ create table if not exists public.turns (
 
 alter table public.games
   add column if not exists game_mode text not null default 'main';
+
+alter table public.games
+  add column if not exists ai_model_label text not null default 'legacy-dqn';
+
+update public.games
+set ai_model_label = 'legacy-dqn'
+where ai_model_label is null or trim(ai_model_label) = '';
 
 alter table public.players enable row level security;
 alter table public.games enable row level security;

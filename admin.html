@@ -71,6 +71,7 @@
   .mbti{background:rgba(126,200,240,.14);color:var(--blue)}
   .mode-main{background:rgba(126,200,240,.14);color:var(--blue)}
   .mode-tutorial{background:rgba(200,126,240,.14);color:#e3b3ff}
+  .model-chip{background:rgba(240,200,126,.18);color:#f5d58f}
   .duplicate-badge{background:rgba(240,200,126,.18);color:#f5d58f;margin-left:6px}
   .mini-board{display:flex;gap:2px;flex-wrap:wrap;max-width:260px}
   .cell{width:18px;height:20px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:800}
@@ -142,6 +143,7 @@
               <th>ID</th>
               <th>Player</th>
               <th>Mode</th>
+              <th>AI Model</th>
               <th>Phone</th>
               <th>MBTI</th>
               <th>Played At</th>
@@ -153,7 +155,7 @@
             </tr>
           </thead>
           <tbody id="table-body">
-            <tr><td colspan="11" class="empty">불러오는 중...</td></tr>
+            <tr><td colspan="12" class="empty">불러오는 중...</td></tr>
           </tbody>
         </table>
       </div>
@@ -216,6 +218,11 @@ function modeBadge(mode){
   return `<span class="badge mode-${normalized}">${label}</span>`;
 }
 
+function modelBadge(label){
+  const text = String(label || 'legacy-dqn');
+  return `<span class="badge model-chip">${text}</span>`;
+}
+
 function formatPhone(phone){
   const digits = String(phone || '').replace(/\D/g,'');
   if(!digits) return '-';
@@ -239,7 +246,9 @@ async function fetchHealth(){
     const text = document.getElementById('health-text');
     if(d.supabase_ready){
       dot.style.background = 'var(--green)';
-      text.textContent = d.model_loaded ? `Supabase 연결됨 / 모델 로드 (${d.device.toUpperCase()})` : `Supabase 연결됨 / fallback AI (${d.device.toUpperCase()})`;
+      text.textContent = d.model_loaded
+        ? `Supabase 연결됨 / ${d.ai_model_label || 'model'} (${d.device.toUpperCase()})`
+        : `Supabase 연결됨 / ${d.ai_model_label || 'fallback-rules'} (${d.device.toUpperCase()})`;
     }else{
       dot.style.background = 'var(--gold)';
       text.textContent = 'Supabase 미연결';
@@ -269,13 +278,14 @@ function renderTable(page){
 
   const tb = document.getElementById('table-body');
   if(!rows.length){
-    tb.innerHTML = '<tr><td colspan="11" class="empty">표시할 기록이 없습니다.</td></tr>';
+    tb.innerHTML = '<tr><td colspan="12" class="empty">표시할 기록이 없습니다.</td></tr>';
   }else{
     tb.innerHTML = rows.map(g => `
       <tr>
         <td class="mono">${g.id}</td>
         <td>${g.player_name || 'Anonymous'}</td>
         <td>${modeBadge(g.game_mode)}</td>
+        <td>${modelBadge(g.ai_model_label)}</td>
         <td class="mono">${formatPhone(g.phone_number)}</td>
         <td>${mbtiBadge(g.mbti)}</td>
         <td class="mono muted">${fmtTime(g.played_at)}</td>
@@ -310,7 +320,7 @@ async function loadRecords(page){
     renderStats(d);
     renderTable(page);
   }catch(e){
-    document.getElementById('table-body').innerHTML = '<tr><td colspan="11" class="empty">기록을 불러오지 못했습니다.</td></tr>';
+    document.getElementById('table-body').innerHTML = '<tr><td colspan="12" class="empty">기록을 불러오지 못했습니다.</td></tr>';
   }
 }
 
@@ -360,6 +370,7 @@ async function showDetail(gid){
       html += `
         <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
           <span class="chip">Mode <b>${String(game.game_mode || 'main').toUpperCase()}</b></span>
+          <span class="chip">AI Model <b>${game.ai_model_label || 'legacy-dqn'}</b></span>
           ${game.phone_number ? `<span class="chip">Phone <b>${formatPhone(game.phone_number)}</b></span>` : ''}
           ${game.age ? `<span class="chip">Age <b>${game.age}</b></span>` : ''}
           ${game.gender ? `<span class="chip">Gender <b>${game.gender}</b></span>` : ''}
