@@ -774,17 +774,24 @@ active_ai_model_label = FALLBACK_AI_MODEL_LABEL
 if TORCH_AVAILABLE:
     model = DuelingQNetwork(MODEL_STATE_SIZE, 20).to(DEVICE)
     for name in ["best_model.pth", "final_model.pth"]:
-        model_path = os.path.join(BASE_DIR, name)
-        if os.path.exists(model_path):
+        candidate_paths = [
+            os.path.join(BASE_DIR, name),
+            os.path.join(BASE_DIR, "api", name),
+        ]
+        for model_path in candidate_paths:
+            if not os.path.exists(model_path):
+                continue
             try:
                 model.load_state_dict(torch.load(model_path, map_location=DEVICE))
                 model.eval()
                 loaded = True
                 active_ai_model_label = CURRENT_AI_MODEL_LABEL
-                print(f"[Model] {name}")
+                print(f"[Model] {name} @ {model_path}")
                 break
             except Exception as exc:
-                print(f"[WARNING] Failed to load {name}: {exc}")
+                print(f"[WARNING] Failed to load {model_path}: {exc}")
+        if loaded:
+            break
     if not loaded:
         print("[WARNING] No model file")
 else:
