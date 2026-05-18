@@ -26,6 +26,16 @@ import numpy as np
 from flask import Flask, Response, jsonify, request, send_file
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_WEIGHT_SEARCH_PATHS = [
+    os.path.join(BASE_DIR, "api", "best_model_weights_v16.npz"),
+    os.path.join(BASE_DIR, "api", "final_model_weights_v16.npz"),
+]
+TORCH_MODEL_SEARCH_PATHS = [
+    os.path.join(BASE_DIR, "best_model.pth"),
+    os.path.join(BASE_DIR, "final_model.pth"),
+    os.path.join(BASE_DIR, "api", "best_model.pth"),
+    os.path.join(BASE_DIR, "api", "final_model.pth"),
+]
 
 TORCH_AVAILABLE = False
 try:
@@ -769,33 +779,91 @@ def build_state(board, num, deck, ci):
 
 
 model = None
+numpy_model = None
 loaded = False
 active_ai_model_label = FALLBACK_AI_MODEL_LABEL
-if TORCH_AVAILABLE:
+active_ai_mode = "fallback"
+
+
+def relu_np(x):
+    return np.maximum(x, 0.0).astype(np.float32)
+
+
+def conv1d_same_np(x, weight, bias):
+    padded = np.pad(x, ((0, 0), (1, 1)), mode="constant")
+    outputs = []
+    kernel = weight.shape[-1]
+    for start in range(x.shape[1]):
+        window = padded[:, start : start + kernel]
+        outputs.append(np.tensordot(weight, window, axes=((1, 2), (0, 1))) + bias)
+    return np.stack(outputs, axis=1).astype(np.float32)
+
+
+class NumpyDuelingNetwork:
+    def __init__(self, weights):
+        self.weights = {key: np.asarray(value, dtype=np.float32) for key, value in weights.items()}
+
+    def linear(self, x, weight_key, bias_key):
+        weight = self.weights[weight_key]
+        bias = self.weights[bias_key]
+        return weight @ x + bias
+
+    def forward(self, state):
+        state = np.asarray(state, dtype=np.float32)
+        board_norm = state[:20]
+        board_occ = state[20:40]
+        x = np.stack([board_norm, board_occ], axis=0).astype(np.float32)
+        x = relu_np(conv1d_same_np(x, self.weights["conv.0.weight"], self.weights["conv.0.bias"]))
+        x = relu_np(conv1d_same_np(x, self.weights["conv.2.weight"], self.weights["conv.2.bias"]))
+        flat = x.reshape(-1)
+        feat_input = np.concatenate([flat, state[40:]]).astype(np.float32)
+        hidden = relu_np(self.linear(feat_input, "feature.0.weight", "feature.0.bias"))
+        hidden = relu_np(self.linear(hidden, "feature.2.weight", "feature.2.bias"))
+        value = self.linear(relu_np(self.linear(hidden, "value_stream.0.weight", "value_stream.0.bias")), "value_stream.2.weight", "value_stream.2.bias")
+        advantage = self.linear(
+            relu_np(self.linear(hidden, "advantage_stream.0.weight", "advantage_stream.0.bias")),
+            "advantage_stream.2.weight",
+            "advantage_stream.2.bias",
+        )
+        value_scalar = float(np.squeeze(value))
+        return (value_scalar + (advantage - advantage.mean())).astype(np.float32)
+
+
+for model_path in MODEL_WEIGHT_SEARCH_PATHS:
+    if not os.path.exists(model_path):
+        continue
+    try:
+        with np.load(model_path) as data:
+            numpy_model = NumpyDuelingNetwork({key: data[key] for key in data.files})
+        loaded = True
+        active_ai_model_label = CURRENT_AI_MODEL_LABEL
+        active_ai_mode = "numpy"
+        print(f"[Model] numpy weights @ {model_path}")
+        break
+    except Exception as exc:
+        print(f"[WARNING] Failed to load numpy weights {model_path}: {exc}")
+
+if not loaded and TORCH_AVAILABLE:
     model = DuelingQNetwork(MODEL_STATE_SIZE, 20).to(DEVICE)
-    for name in ["best_model.pth", "final_model.pth"]:
-        candidate_paths = [
-            os.path.join(BASE_DIR, name),
-            os.path.join(BASE_DIR, "api", name),
-        ]
-        for model_path in candidate_paths:
-            if not os.path.exists(model_path):
-                continue
-            try:
-                model.load_state_dict(torch.load(model_path, map_location=DEVICE))
-                model.eval()
-                loaded = True
-                active_ai_model_label = CURRENT_AI_MODEL_LABEL
-                print(f"[Model] {name} @ {model_path}")
-                break
-            except Exception as exc:
-                print(f"[WARNING] Failed to load {model_path}: {exc}")
-        if loaded:
+    for model_path in TORCH_MODEL_SEARCH_PATHS:
+        if not os.path.exists(model_path):
+            continue
+        try:
+            model.load_state_dict(torch.load(model_path, map_location=DEVICE))
+            model.eval()
+            loaded = True
+            active_ai_model_label = CURRENT_AI_MODEL_LABEL
+            active_ai_mode = "torch"
+            print(f"[Model] torch weights @ {model_path}")
             break
-    if not loaded:
+        except Exception as exc:
+            print(f"[WARNING] Failed to load torch weights {model_path}: {exc}")
+
+if not loaded:
+    if TORCH_AVAILABLE:
         print("[WARNING] No model file")
-else:
-    print("[WARNING] PyTorch not installed; using fallback AI")
+    else:
+        print("[WARNING] PyTorch not installed; using fallback AI")
 
 
 def require_supabase():
@@ -821,7 +889,7 @@ def health():
             "status": "ok",
             "model_loaded": loaded,
             "ai_ready": True,
-            "ai_mode": "torch" if loaded else "fallback",
+            "ai_mode": active_ai_mode,
             "ai_model_label": active_ai_model_label,
             "device": str(DEVICE),
             "supabase_ready": SUPABASE_AVAILABLE,
@@ -836,7 +904,19 @@ def ai_move():
     pm = get_prob_mask(board, num, deck, ci)
     st = build_state(board, num, deck, ci)
 
-    if TORCH_AVAILABLE and loaded:
+    if active_ai_mode == "numpy" and loaded and numpy_model is not None:
+        fb = np.where(np.array(board) == 0)[0]
+        if len(fb) == 0:
+            return jsonify({"action": 0, "q_values": [0] * 20, "prob_mask": pm.tolist()})
+
+        safe = np.where((np.array(board) == 0) & (pm == 1.0))[0]
+        valid_actions = safe if len(safe) else fb
+        qv_arr = numpy_model.forward(st)
+        mask = np.full_like(qv_arr, -1e9, dtype=np.float32)
+        mask[valid_actions] = 0.0
+        action = int(np.argmax(qv_arr + mask))
+        qv_list = qv_arr.astype(float).tolist()
+    elif TORCH_AVAILABLE and loaded and model is not None:
         fb = np.where(np.array(board) == 0)[0]
         if len(fb) == 0:
             return jsonify({"action": 0, "q_values": [0] * 20, "prob_mask": pm.tolist()})
