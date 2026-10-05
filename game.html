@@ -398,7 +398,7 @@
 
   <div class="survey-actions">
     <button class="btn-secondary" onclick="backToMenu()">← 돌아가기</button>
-    <button class="btn-start" onclick="submitSurveyAndStart()">게임 시작 →</button>
+    <button class="btn-start" id="survey-submit-btn" onclick="submitSurveyAndStart()">게임 시작 →</button>
   </div>
 </div>
 
@@ -609,6 +609,8 @@ function backToMenu(){
   document.getElementById('menu').style.display='flex';
 }
 async function submitSurveyAndStart(){
+  const submitBtn=document.getElementById('survey-submit-btn');
+  if(submitBtn.disabled)return;
   const name=document.getElementById('s-name').value.trim();
   const age=getRadioValue('s-age');
   const gender=getRadioValue('s-gender');
@@ -626,6 +628,9 @@ async function submitSurveyAndStart(){
   errEl.style.display='none';
   playerName=name;
   saveSurveyDraft();
+  const originalLabel=submitBtn.textContent;
+  submitBtn.disabled=true;
+  submitBtn.textContent='서버 연결 확인 중...';
 
   try{
     const res=await fetch('/api/save_survey',{
@@ -633,19 +638,29 @@ async function submitSurveyAndStart(){
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({player_name:name,age,gender,mbti,playtime,genres})
     });
-    const data=await res.json();
+    let data={};
+    try{data=await res.json();}catch(parseError){data={};}
     if(!res.ok||!data.player_id||!data.player_token){
-      throw new Error(data.message||'survey save failed');
+      const error=new Error(data.message||'survey save failed');
+      error.status=res.status;
+      error.code=data.code||'';
+      throw error;
     }
     playerId=data.player_id;
     playerToken=data.player_token;
     clearSurveyDraft();
     await startGame();
   }catch(e){
-    errEl.textContent='설문 저장에 실패했습니다. 잠시 후 다시 시도해주세요.';
+    const databaseFailure=!e.status||e.status>=500||e.code==='database_unavailable'||e.code==='database_not_configured';
+    errEl.textContent=databaseFailure
+      ? '게임 서버의 데이터 저장소에 연결할 수 없습니다. 잠시 후 다시 시도해주세요.'
+      : '설문 정보를 저장하지 못했습니다. 입력 내용을 확인해주세요.';
     errEl.style.display='block';
     playerId=null;
     playerToken='';
+  }finally{
+    submitBtn.disabled=false;
+    submitBtn.textContent=originalLabel;
   }
 }
 
@@ -662,7 +677,7 @@ function renderAB(){let html='',qMin=0,qMax=1;if(lastQ){const values=lastQ.filte
 function updateScores(){const ps=calcScore(pBoard),as_=calcScore(aBoard);document.getElementById('player-score').textContent=ps;document.getElementById('ai-score').textContent=as_;document.getElementById('player-count').textContent=`${pBoard.filter(Boolean).length}/20`;document.getElementById('ai-count').textContent=`${aBoard.filter(Boolean).length}/20`;return{ps,as_};}
 function renderST(){let html='';for(const [streak,points] of Object.entries(ST)){const color=points>=100?'var(--gold)':points>=30?'var(--purple)':'var(--blue)';html+=`<div class="score-table-item"><div class="streak">${streak}연속</div><div class="pts" style="color:${color}">${points}</div></div>`;}document.getElementById('score-table').innerHTML=html;}
 function toggleQValues(){showQ=!showQ;document.getElementById('qval-toggle').classList.toggle('active',showQ);renderAB();}
-async function checkServer(){try{const res=await fetch('/api/health');const data=await res.json();if(data.ai_ready){document.getElementById('status-dot').style.background='var(--green)';document.getElementById('status-text').textContent=data.model_loaded?`모델 로드 완료 (${String(data.device).toUpperCase()})`:`fallback AI 준비됨 (${String(data.device).toUpperCase()})`;}else{document.getElementById('status-dot').style.background='var(--yellow)';document.getElementById('status-text').textContent='서버 연결됨';}}catch(e){document.getElementById('status-dot').style.background='var(--red)';document.getElementById('status-text').textContent='서버 연결 실패';}}
+async function checkServer(){try{const res=await fetch('/api/health');const data=await res.json();if(data.database_ready===false){document.getElementById('status-dot').style.background='var(--red)';document.getElementById('status-text').textContent='데이터 저장소 연결 실패';}else if(data.ai_ready){document.getElementById('status-dot').style.background='var(--green)';document.getElementById('status-text').textContent=data.model_loaded?`모델 로드 완료 (${String(data.device).toUpperCase()})`:`fallback AI 준비됨 (${String(data.device).toUpperCase()})`;}else{document.getElementById('status-dot').style.background='var(--yellow)';document.getElementById('status-text').textContent='서버 연결됨';}}catch(e){document.getElementById('status-dot').style.background='var(--red)';document.getElementById('status-text').textContent='서버 연결 실패';}}
 async function requestAi(){try{const res=await fetch('/api/ai_move',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({board:aBoard,current_num:deck[ci],deck,current_index:ci})});return await res.json();}catch(e){const empty=aBoard.map((value,index)=>value===0?index:-1).filter(index=>index>=0);return{action:empty[Math.floor(Math.random()*empty.length)]||0,q_values:null};}}
 async function createGameSession(){
   if(!playerId||!playerToken){

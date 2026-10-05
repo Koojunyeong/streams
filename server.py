@@ -20,12 +20,14 @@ from functools import cmp_to_key
 from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
-load_dotenv()
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+load_dotenv(os.path.join(BASE_DIR, ".env"))
+load_dotenv(os.path.join(BASE_DIR, ".env.vercel"))
 
 import numpy as np
 from flask import Flask, Response, jsonify, request, send_file
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_WEIGHT_SEARCH_PATHS = [
     os.path.join(BASE_DIR, "api", "best_model_weights_v16.npz"),
     os.path.join(BASE_DIR, "api", "final_model_weights_v16.npz"),
@@ -49,10 +51,29 @@ except Exception:
 
 SUPABASE_AVAILABLE = False
 SUPABASE_CLIENT = None
-SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
-SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
-if not SUPABASE_SERVICE_ROLE_KEY:
-    SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_KEY", "")
+
+
+def configured_env(*names):
+    for name in names:
+        value = os.environ.get(name, "").strip()
+        normalized = value.lower()
+        if value and not any(marker in normalized for marker in ("your-project", "your-service-role", "changeme")):
+            return value
+    return ""
+
+
+SUPABASE_URL = configured_env(
+    "SUPABASE_URL",
+    "game_SUPABASE_URL",
+    "NEXT_PUBLIC_game_SUPABASE_URL",
+)
+SUPABASE_SERVICE_ROLE_KEY = configured_env(
+    "SUPABASE_SERVICE_ROLE_KEY",
+    "SUPABASE_SECRET_KEY",
+    "SUPABASE_KEY",
+    "game_SUPABASE_SERVICE_ROLE_KEY",
+    "game_SUPABASE_SECRET_KEY",
+)
 
 if SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY:
     try:
@@ -868,8 +889,19 @@ if not loaded:
 
 def require_supabase():
     if not SUPABASE_AVAILABLE:
-        return jsonify({"status": "error", "message": "Supabase is not configured"}), 500
+        return jsonify({"status": "error", "code": "database_not_configured", "message": "Database is not configured"}), 503
     return None
+
+
+def database_health():
+    if not SUPABASE_AVAILABLE:
+        return False, "not_configured"
+    try:
+        sb().table("players").select("id").limit(1).execute()
+        return True, None
+    except Exception as exc:
+        print(f"[Supabase] health check failed: {exc}")
+        return False, "unreachable"
 
 
 @app.route("/")
@@ -884,15 +916,18 @@ def admin():
 
 @app.route("/api/health")
 def health():
+    database_ready, database_error = database_health()
     return jsonify(
         {
-            "status": "ok",
+            "status": "ok" if database_ready else "degraded",
             "model_loaded": loaded,
             "ai_ready": True,
             "ai_mode": active_ai_mode,
             "ai_model_label": active_ai_model_label,
             "device": str(DEVICE),
-            "supabase_ready": SUPABASE_AVAILABLE,
+            "supabase_ready": database_ready,
+            "database_ready": database_ready,
+            "database_error": database_error,
         }
     )
 
@@ -962,7 +997,8 @@ def save_survey():
         pid = data[0]["id"] if data else None
         return jsonify({"status": "saved", "player_id": pid, "player_token": issue_player_token(pid, payload["player_name"])})
     except Exception as exc:
-        return jsonify({"status": "error", "message": str(exc)}), 500
+        print(f"[Supabase] survey save failed: {exc}")
+        return jsonify({"status": "error", "code": "database_unavailable", "message": "Database is unavailable"}), 503
 
 
 @app.route("/api/start_game", methods=["POST"])
